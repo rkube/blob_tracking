@@ -21,6 +21,7 @@ import pymorph as pm
 import matplotlib.pyplot as plt
 # from phantom_helper import make_rz_array
 # from scipy.interpolate import griddata
+from scipy.optimize import leastsq
 from scipy.io import readsav
 
 
@@ -137,8 +138,178 @@ def fwhm(array):
     return np.array([int(left_idx), int(right_idx)])
 
 
-def tracker(frames, event, thresh_amp, thresh_dist, blob_ext,
-            direction='forward', plots=False, verbose=False):
+class gauss_fixed_mu(object):
+    def __init__(self, mu):
+        self.mu = mu
+    def __call__(self, x, sigma):
+        return np.exp(-0.5 * (x - self.mu) * (x - self.mu) / (sigma * sigma))
+
+
+def width_gaussian(y, mu, imin=4, imax=8, l2min=4):
+    """
+    Fit a Gaussian on y, centered around mu
+    on the interval [mu - i:mu - i], where i = imin..imax
+
+    The best fit is given by the one, which minimizes the L2 norm on the
+    intervall [mu - l2min:mu + l2min]
+
+    Return the width of the best fit
+
+    Input:
+            y  : Data to fit
+            mu : Center of the gauss
+
+    Output:
+            sigma:  Width of the resulting fit
+            i    :  i value that achieved the best fit
+            err  :  L2 error of the fit
+    """
+
+    assert(l2min <= imin)
+
+    gaussian_fun = gauss_fixed_mu(mu)
+    def err_fun(p, y, x):
+        return (y - gaussian_fun(x, p))
+
+    irange = np.arange(imin, imax, dtype='int')
+    xrg = np.arange(0, y.shape[0])
+    p = np.zeros(irange.shape[0])
+    L2 = np.zeros(irange.shape[0])
+
+#    plt.figure()
+#    plt.plot([mu], [1.0], 'ko')
+
+    for idx, i in enumerate(irange):
+        idx_lo = int(max(mu - i, 0))
+        idx_up = int(min(mu + i, y.shape[0]))
+        fit_range = xrg[idx_lo:idx_up]
+        fit_data = y[idx_lo:idx_up] / y[idx_lo:idx_up].max()
+
+        p0 = [1.0]
+        p_i, success_i = leastsq(err_fun, p0, args=(fit_data, fit_range), maxfev=1000)
+        p[idx] = p_i
+
+        mid_idx = fit_data.shape[0] / 2
+        l2_idx = np.arange(mid_idx - l2min, mid_idx + l2min, 1, dtype='int')
+        L2[idx] = ((fit_data[l2_idx] - gaussian_fun(p_i, fit_range[l2_idx])) ** 2.0).sum() / float(l2_idx.shape[0])
+
+#        print i, p[idx], L2[idx], success_i
+#
+#        label_str = 'sigma = %5.2f, L2 = %5.2f' % (p[idx], L2[idx])
+#        plt.plot(fit_range, fit_data)
+#        plt.plot(fit_range, gaussian_fun(fit_range, p[idx]), label=label_str)
+
+    best_fit_idx = L2.argmin()
+#    idx_lo = int(max(mu - irange[best_fit_idx], 0))
+#    idx_up = int(min(mu + irange[best_fit_idx], y.shape[0]))
+#
+#    plt.figure()
+#    plt.plot([mu], [1.0], 'ko')
+#    fit_range = xrg[idx_lo:idx_up]
+#    fit_data = y[idx_lo:idx_up] / y[idx_lo:idx_up].max()
+#    plt.plot(fit_range, fit_data)
+#    plt.plot(fit_range, gaussian_fun(fit_range, p[best_fit_idx]), 'k', lw=3)
+
+#    plt.legend()
+#    plt.show()
+    return (p[best_fit_idx], irange[best_fit_idx], L2[best_fit_idx])
+
+
+class TrackingError(Exception):
+    pass
+
+
+def find_closest_region(frame, thresh_amp, x0, max_dist=2.0, verbose=False):
+    """
+    Returns the contiguous area above a threshold in a frame, whose centroid coordinates 
+    are closest to x0
+
+    Input:
+        frame       : Input frame
+        thresh_amp  : Threshold for area separation
+        x0          : Distance to centroid
+        max_dist    : Maximal distance to centroid
+
+    Output:
+        Binary image with contiguous area marked with 1
+    """
+
+    # Label all contiguous regions with ore than 60% of the original intensity
+    labels = pm.label(frame > thresh_amp)
+    # Get the area of all contiguous regions
+    blob_area = pm.blob(labels, 'area', output='data')
+    # Get the controid of all contiguous regions
+    blob_cent = pm.blob(labels, 'centroid', output='data')
+    if (verbose):
+        print 'x0 = (%f, %f)' % (x0[0], x0[1])
+        print 'Labelling found %d regions: ' % labels.max()
+        for i in np.arange(labels.max()):
+            print 'Region: %d, centroid at %d, %d, area: %d' % (i, blob_cent[i, 1], blob_cent[i, 0], blob_area[i])
+
+    if (blob_cent.size < 1):
+        raise TrackingError
+
+    # We now have a bunch of contiguous regions.
+    # Loop over the regions that are at least 10% of the largest region
+    # and find the one, whose centroid is closest to the  last known position 
+    # of the blob
+
+    min_idx = -1   
+    min_dist_frame = np.sqrt(frame.shape[0] * frame.shape[1])     # Maximal distance on a 64x64 grid
+
+    for d_idx, i in enumerate(blob_area):
+        # Compute distance of current areas centroid to the last centroids position
+        dist = np.sqrt((blob_cent[d_idx, 1] - x0[1]) ** 2 +
+                       (blob_cent[d_idx, 0] - x0[0]) ** 2)
+        if (verbose):
+            print 'Region %d, center: x=%d, y=%d, A=%f, distance to last centroid: %f' %\
+                (d_idx, blob_cent[d_idx, 0], blob_cent[d_idx, 1], i, dist)
+
+        # Skip areas who are less than 10% of the original
+        if (i < 0.1 * blob_area.max()):
+            if(verbose):
+                print 'passing blob with area %f, d_idx = %d' % (i, d_idx)
+            continue
+
+        if (dist < min(max_dist, min_dist_frame)):
+            min_dist_frame = dist
+            min_idx = d_idx
+            if (verbose):
+                print 'Accepted'
+
+    # If min_dist_frame is still sqrt(8192), no area was selected and the
+    # blob could not be tracked successfully
+    if (min_idx is -1):
+        print 'No peak satisfying criteria.'
+        raise TrackingError
+
+    x_centroid = blob_cent[min_idx]
+
+    # Compute the x and y COM coordinates of the blob, store
+    blob_mask = labels != (min_idx + 1)
+    event_masked = np.ma.MaskedArray(frame,
+                                     mask=blob_mask,
+                                     fill_value=0)
+    #plt.figure()
+    #plt.subplot(131)
+    #plt.contourf(labels)
+    #plt.colorbar()
+
+    #plt.subplot(132)
+    #plt.contourf(frame, 64)
+    #plt.colorbar()
+
+    #plt.subplot(133)
+    #plt.contourf(event_masked)
+    #plt.colorbar()
+
+    #plt.show()
+
+    return (x_centroid, event_masked)
+
+
+def tracker(frames, x0, event, thresh_amp, thresh_dist, blob_ext,
+            plots=False, verbose=False):
     """
     Track the blob in a dynamic intervall forward or backward in time, as long
     as its amplitude is over a given threshold and the peak has detected less
@@ -147,10 +318,10 @@ def tracker(frames, event, thresh_amp, thresh_dist, blob_ext,
     frames
 
     Input:
-        tau:        Maximum number of frames to track blob
+        frames:     The frames on which we track the centroid motion
+        x0:         Original position of the centroid
         event:      ndarray, [I0, t0, R0, z0] Index of original feature to
                     track
-        direction:  Traverse frames 'forward' or 'backward' in dimension 0
         thresh_amp: Threshold for amplitude decay relative to frame0
         thresh_dist Threshold for blob movement relative to previous frame
         blob_ext:   Extend of the blob used for determining its average shape
@@ -163,6 +334,9 @@ def tracker(frames, event, thresh_amp, thresh_dist, blob_ext,
         fwhm_pol_idx:   Indices that mark the lower and upper FWHM of the blob
         blob:           Array that stores the blob extend
     """
+
+    assert (blob_ext % 2 == 0)
+
     if (verbose is True):
         print 'Called tracker with '
         print '\tevent = ', event
@@ -171,117 +345,58 @@ def tracker(frames, event, thresh_amp, thresh_dist, blob_ext,
         print '\tblob_ext = ', blob_ext
         print '\tplots = ', plots
 
-    assert (direction in ['forward', 'backward'])
-    assert (blob_ext % 2 == 0)
-
     # Maximum number of frames the blob is tracked for is given by
     # dimension 0 of frames
     # tau_max = np.shape(frames)[0]
     tau_max = frames.shape[0]
-    I0, z0_last, R0_last = event[0], event[2], event[3]
+    I0_last, z0_last, R0_last = event[0], x0[0], x0[1]
+
+    print 'tau_max = %d' % (tau_max)
 
     # I0 is the threshold amplitude we use for detecting blobs
     # i.e. for blob tracking, we identify later all connected regions that are larger than 
     # I0 * thresh_amp
 
-    if (direction is 'forward'):
-        f_idx = 0  # Index used to access frames
-        tau = 0  # Start with zero offset
-    elif (direction is 'backward'):
-        f_idx = -1  # Start at the second to last frame, 0 based indexing
-        tau = 1  # Start with one frame offset
-
     if (verbose):
-        verb_msg = 'Tracking blob %s, t_idx %d x = %d, y = %d, I0 = %f' % (direction, tau, R0_last, z0_last, I0)
-        verb_msg += ' thresh_amp = %f, thresh_dist = %f' % (thresh_amp * I0, thresh_dist)
+        verb_msg = 'Tracking blob, x = %d, y = %d, I0 = %f' % (R0_last, z0_last, I0_last)
+        verb_msg += ' thresh_amp = %f, thresh_dist = %f' % (thresh_amp * I0_last, thresh_dist)
         print verb_msg
 
-    xycom = np.zeros([tau_max, 2])  # Return values: COM position of peak
-    xymax = np.zeros([tau_max, 2])  # Position of the blob peak
-    fwhm_pol_idx = np.zeros([tau_max, 2], dtype='int')  # Poloidal FWHM
-    fwhm_rad_idx = np.zeros([tau_max, 2], dtype='int')  # Radial FWHM
-    amp = np.zeros([tau_max])  # Amplitude at COM position
+    xycom = np.zeros([tau_max, 2])                      # Return values: COM position of peak
+    xymax = np.zeros([tau_max, 2])                      # Position of the blob peak
+    width_pol = np.zeros(tau_max, dtype='float64')      # Width of Gaussian fit, poloidal direction  
+    width_rad = np.zeros(tau_max, dtype='float64')      # Width of Gaussian fit, radial direction
+    fwhm_pol = np.zeros([tau_max, 2], dtype='int')      # Poloidal FWHM
+    fwhm_rad = np.zeros([tau_max, 2], dtype='int')      # Radial FWHM
+    amp = np.zeros([tau_max])                           # Amplitude at COM position
 
     good_blob = True
-    while (good_blob and tau < tau_max):
+    tau = 0     # The offset, where we try to find a good blob
+    while (good_blob and tau < tau_max - 1):
+        tau += 1                              # Advance indices
+        # Load next frame
+        event_frame = frames[tau, :, :]
+        
         if (verbose):
             print ''
-            print 'f_idx %d, Last blob position: x = %d, y = %d, I0 = %f' %\
-                (f_idx, R0_last, z0_last, frames[f_idx, z0_last, R0_last])
+            print 'tau: %d, Last blob position: x=%d, y=%d, I0=%f' %\
+                (tau, R0_last, z0_last, I0_last)
+    
+        # Find the closest centroid region
+        try:
+            x0, event_masked = find_closest_region(event_frame, thresh_amp * I0_last, 
+                    [z0_last, R0_last], max_dist=thresh_dist, verbose=False)
+        except TrackingError:
+            print 'tau = %d: Lost blob track' % tau
+            tau -= 1
+            break
 
-        event_frame = frames[f_idx, :, :]
-        #plt.figure()
-        #plt.subplot(121)
-        #plt.contourf(event_frame, 64)
-        #plt.colorbar()
-        #plt.subplot(122)
-        #plt.contourf(event_frame > thresh_amp * event[0])
-        #plt.colorbar()
-
-        #plt.show()
-        
-        # Label all contiguous regions with ore than 60% of the original intensity
-        labels = pm.label(event_frame > thresh_amp * event[0])
-        # Get the area of all contiguous regions
-        blob_area = pm.blob(labels, 'area', output='data')
-        # Get the controid of all contiguous regions
-        blob_cent = pm.blob(labels, 'centroid', output='data')
         if (verbose):
-            print 'Labelling found %d regions: ' % labels.max()
-            for i in np.arange(labels.max()):
-                print 'Region: %d, centroid at %d, %d, area: %d' % (i, blob_cent[i, 1], blob_cent[i, 0], blob_area[i])
+            print '        New blob position: x=%d, y=%d' % (x0[0], x0[1])
 
-        if (blob_cent.size < 1):
-            # No peak here, quit tracking
-            good_blob = False
-            print 'Frame %d, %ss: lost track of blob' % (f_idx, direction)
-            break
-
-        # We now have a bunch of contiguous regions.
-        # Loop over the regions that are at least 10% of the largest region
-        # and find the one, whose centroid is closest to the  last known position 
-        # of the blob
-
-        loop_area = np.where(blob_area > 0.1 * blob_area.max())[0]
-        print 'Considering areas ', loop_area
-        min_idx = -1                        #
-        min_dist_frame = np.sqrt(event_frame.shape[0] * event_frame.shape[1])     # Maximal distance on a 64x64 grid
-        for d_idx, i in enumerate(loop_area):
-            dist = np.sqrt((blob_cent[i, 1] - R0_last) ** 2 +
-                           (blob_cent[i, 0] - z0_last) ** 2)
-            if (verbose):
-                print 'Region %d, center: x=%d, y=%d, distance to last peak: %f' %\
-                    (i, blob_cent[i, 0], blob_cent[i, 1], dist)
-            if (dist < min(thresh_dist, min_dist_frame)):
-                print '%f < min(%f, %f)' %(dist, thresh_dist, min_dist_frame)
-                min_dist_frame = dist
-                min_idx = i
-                if (verbose):
-                    print 'Accepted'
-            else:
-                continue
-        print 'Chose region %d, dist = %f' % (min_idx, min_dist_frame)
-
-
-        # If min_dist_frame is still sqrt(8192), no area was selected and the
-        # blob could not be tracked successfully
-        if (min_idx is -1):
-            print 'No peak satisfying criteria.'
-            print '\tFound: dist = %f, Stopping %s tracking after %d frames' %\
-                (min_dist_frame, direction, tau)
-            break
-
-        # Compute the x and y COM coordinates of the blob, store
-        blob_mask = labels != (min_idx + 1)
-        event_masked = np.ma.MaskedArray(event_frame,
-                                         mask=blob_mask,
-                                         fill_value=0)
-
-        # When used to index frames[:,:,:]:
-        #      xymax[tau,:] = [index for axis 2, index for axis 1]
-        # Maximum in the blob mask
-        xymax[tau, :] = np.unravel_index(event_masked.argmax(),
-                                         np.shape(labels))
+        # Compute maximum and COM position on the new centroid
+        xymax[tau, :] = np.unravel_index(event_masked.argmax(), event_frame.shape)
+                                         
         # When used to index frames[:,:,:]:
         #     xycom[tau,:] = [index for axis 1, index for axis 2]
         # To be consistent with indexing from xymax, flip this array
@@ -289,45 +404,53 @@ def tracker(frames, event, thresh_amp, thresh_dist, blob_ext,
         xycom[tau, ::-1] = com(event_masked)
         ycom_off, xcom_off = xycom[tau, :].round().astype('int')
 
-        amp[tau] = event_frame[z0_last, R0_last]
         # Follow the peak
         z0_last, R0_last = xymax[tau, :].astype('int')
-
-        if (verbose):
-            print 'Peak at (%d,%d), COM at (%d,%d), I0=' %\
-                (xymax[tau, 0], xymax[tau, 1],
-                 xycom[tau, 0], xycom[tau, 1])
+        amp[tau] = event_frame[z0_last, R0_last]
 
         if verbose:
-            vrb_msg = '           New blob position: x = %d, y = %d, I0 = %f' % (z0_last, R0_last, amp[tau])
+            vrb_msg = '          New blob position:'
+            vrb_msg += '          x_max = (%d,%d)' %(xymax[tau, 0], xymax[tau, 1])
+            vrb_msg += '          x_com = (%d,%d)' %(xycom[tau, 0], xycom[tau, 1])
             print vrb_msg
 
+        # Fit a Gaussian on the cross section around the maximum
+        sigma, dummy1, dummy2 = width_gaussian(event_frame[xymax[tau, 0], :], xymax[tau, 1])
+        width_pol[tau] = sigma
+        sigma, dummy1, dummy2 = width_gaussian(event_frame[:, xymax[tau, 1]], xymax[tau, 0])
+        width_rad[tau] = sigma
+
         if (plots):
-            plt.figure()
-            plt.title('%s, frame %d' % (direction, f_idx))
-            plt.contour(event_frame, 16, colors='k', linewidth=0.5)
-            plt.contourf(event_frame, 16, cmap=plt.cm.hot)
-            plt.plot(xycom[tau, 1], xycom[tau, 0], 'wo')
-            plt.plot(xymax[tau, 1], xymax[tau, 0], 'w^')
+            plt.figure(figsize=(18, 6))
+            plt.subplot(131)
+            plt.title('frame %d' % (tau))
+            plt.contourf(event_frame, 64, cmap=plt.cm.hot)
+            plt.plot(xycom[tau, 1], xycom[tau, 0], 'ko')
+            plt.plot(xymax[tau, 1], xymax[tau, 0], 'k^')
             plt.colorbar()
             plt.xlabel('x / px')
             plt.ylabel('y / px')
 
-        if (direction is 'forward'):
-            tau += 1                              # Frame accepted, advance indices
-            f_idx += 1
-        elif (direction is 'backward'):
-            # We started at tau=1, subtract one to return correct number of frame
-            # tracked in one direction, ignoring the starting frame
-            # Ignore this for forward frame as we count the original frame here
-            tau -= 1
-            f_idx -= 1
+            plt.subplot(132)
+            plt.plot(event_frame[xycom[tau, 0], :], 'b', label='ax0')
+            plt.plot(xycom[tau, 0], event_frame[xycom[tau, 0], xycom[tau, 1]], 'ko')
+            plt.plot(event_frame[:, xycom[tau, 1]], 'g', label='ax1')
+            plt.plot(xycom[tau, 1], event_frame[xycom[tau, 0], xycom[tau, 1]], 'ko')
+            plt.title('COM crosssections')
 
+            plt.subplot(133)
+            plt.plot(event_frame[xymax[tau, 0], :], 'b', label='ax0')
+            plt.plot(xymax[tau, 0], event_frame[xymax[tau, 0], xymax[tau, 1]], 'k^')
+            plt.plot(event_frame[:, xymax[tau, 1]], 'g', label='ax1')
+            plt.plot(xymax[tau, 1], event_frame[xymax[tau, 0], xymax[tau, 1]], 'k^')
+            plt.title('MAX crosssections')
+
+    # end while (good_blob and tau < tau_max):
 
     if (plots):
         plt.show()
 
-    return tau, amp, xycom, xymax, fwhm_rad_idx, fwhm_pol_idx
+    return tau, amp, xycom, xymax, width_rad, width_pol
 
 
 def find_sol_pixels(shotnr, frame_info=None, rz_array=None,

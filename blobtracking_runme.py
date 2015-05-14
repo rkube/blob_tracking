@@ -72,15 +72,16 @@ for shotnr in shotlist:
     print 'Running blob detection.'
     trails = blob_tracking_fun(shotnr, frames, rz_array,
                                trigger, minmax, logger)
+
     #trails = blob_tracking_fun(shotnr, frames, fi,
     #                           minmax=[thresh, 10.0], logger=logger)
-    logger.info('Blob detection found %d blobs' % len(trails))
-    print 'Found %d blobs' % len(trails)
-    picklefile = open('%d/%d_trails_thresh%2d.pkl' % (shotnr, shotnr,
-                                                      int(10 * thresh)),
-                      'wb')
-    cPickle.dump(trails, picklefile, -1)
-    picklefile.close()
+    #logger.info('Blob detection found %d blobs' % len(trails))
+    #print 'Found %d blobs' % len(trails)
+    #picklefile = open('%d/%d_trails_thresh%2d.pkl' % (shotnr, shotnr,
+    #                                                  int(10 * thresh)),
+    #                  'wb')
+    #cPickle.dump(trails, picklefile, -1)
+    #picklefile.close()
 
     #print 'Computing trail statistics'
     #blob_amps, blob_ell, blob_vel, blob_shape, blobs_used_good_domain, fail_list = blob_statistics.statistics_blob_sol(shotnr, trails, fi, frames=frames, good_domain=domain, logger=logger)

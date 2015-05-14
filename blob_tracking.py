@@ -77,7 +77,7 @@ def blob_tracking(shotnr, frames, rz_array, trigger=np.array([40, 50, 16, 48]),
 
     # Define the events we will analyze
 #    event_range = np.arange(num_events)
-    event_range = np.arange(5, 6)
+    event_range = np.arange(46, 47)
 #    num_events  = np.size(event_range)
 
     # Get R,z projection, grid data
@@ -108,13 +108,20 @@ def blob_tracking(shotnr, frames, rz_array, trigger=np.array([40, 50, 16, 48]),
         #plt.show()
         #print 'frames.max  = %f' % frames[t0, :, :].max()
         newtrail = blobtrail.blobtrail(frames[t0 - tau_max:
-                                              t0 + tau_max, :, :],
+                                              t0 + tau_max + 1, :, :],
                                        event, shotnr,
                                        thresh_amp=0.7, blob_ext=14,
                                        thresh_dist=8.,
                                        fwhm_max_idx=18,
                                        frame0=frame0,
                                        doplots=False)
+
+        print ''
+        print 'blob trail max:', newtrail.get_trail_max()
+        print 'blob trail COM:', newtrail.get_trail_com()
+        print ''
+        print '=========================================================='
+
         if (np.size(newtrail.get_tau()) < 4):
             fail_list.append(idx)
             failcount += 1
@@ -153,10 +160,10 @@ def blob_tracking(shotnr, frames, rz_array, trigger=np.array([40, 50, 16, 48]),
             except:
                 print log_str
 
-        #newtrail.plot_trail(frames, rz_array=rz_array, xyi=xyi,
-        #                    trigger_box=trigger, sep_data=None,
-        #                    plot_com=True, plot_shape=True, plot_geom=True,
-        #                    save_frames=False)
+        newtrail.plot_trail(frames, rz_array=rz_array, xyi=xyi,
+                            trigger_box=trigger, sep_data=None,
+                            plot_com=True, plot_shape=True, plot_geom=False,
+                            save_frames=False)
         trails.append(newtrail)
 
     return trails
