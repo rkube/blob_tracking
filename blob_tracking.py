@@ -18,7 +18,7 @@ blob in a blobtrail object. Return the list of blobtrail objects
 """
 
 
-def blob_tracking(shotnr, frames, rz_array, trigger=np.array([40, 50, 16, 48]), 
+def blob_tracking(shotnr, frames, trigger=np.array([40, 50, 16, 48]), 
                   minmax=np.array([2.0, 10.0]),
                   logger=None, 
                   datadir='/Volumes/Backup/cmod_data/phantom/',
@@ -28,10 +28,6 @@ def blob_tracking(shotnr, frames, rz_array, trigger=np.array([40, 50, 16, 48]),
     Run blob detection and tracking on the provided frames
     shotnr:   integer, 10 digits. Shot identifier 
     frames:   ndarray, axis0: time, axis1: radial, axis2: poloidal
-    rz_array: ndarray, Maps pixel space to coorinate space
-                       axis0: pixel coordinate, 
-                       axis1: pixel coordinate, 
-                       axis2[0]: x -coordinate, axis2[1]: y-coordinate
     trigger:  ndarray, Array in which blobs are to be detected: [r_lo, r_up, z_low, z_up]
     minmax:   ndarray, minimum / maximum threshold for blob detection
     logger:   logger facility to use
@@ -76,18 +72,18 @@ def blob_tracking(shotnr, frames, rz_array, trigger=np.array([40, 50, 16, 48]),
         print log_msg
 
     # Define the events we will analyze
-#    event_range = np.arange(num_events)
-    event_range = np.arange(5)
+    event_range = np.arange(num_events)
+#    event_range = np.arange(2)
 #    num_events  = np.size(event_range)
 
     # Get R,z projection, grid data
     #rz_array, transform_data = make_rz_array(frame_info)
-    xxi, yyi = np.meshgrid(np.linspace(rz_array[:, :, 0].min(),
-                                       rz_array[:, :, 0].max(), 64),
-                           np.linspace(rz_array[:, :, 1].min(),
-                                       rz_array[:, :, 1].max(), 64))
-    xyi = np.concatenate((xxi[:, :, np.newaxis],
-                          yyi[:, :, np.newaxis]), axis=2)
+    #xxi, yyi = np.meshgrid(np.linspace(rz_array[:, :, 0].min(),
+    #                                   rz_array[:, :, 0].max(), 64),
+    #                       np.linspace(rz_array[:, :, 1].min(),
+    #                                   rz_array[:, :, 1].max(), 64))
+    #xyi = np.concatenate((xxi[:, :, np.newaxis],
+    #                      yyi[:, :, np.newaxis]), axis=2)
     trails = []
     fail_list = []
     failcount = 0

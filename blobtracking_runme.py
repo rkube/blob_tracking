@@ -5,13 +5,14 @@ import numpy as np
 import logging
 import cPickle
 import matplotlib as mpl
-#from misc.load_mdsframes import load_mdsframes
 from load_mdsframes import load_mdsframes
-import helper_functions
 from blob_tracking import blob_tracking as blob_tracking_fun
-from plotting import plot_trail_simple
-#from blob_tracking.blob_tracking import blob_tracking as blob_tracking_fun
-#from blob_tracking import blob_statistics
+from plotting import plot_trail_simple, plot_trail_geom
+from scipy.io import readsav
+
+from misc.phantom_helper import make_rz_array
+import helper_functions
+from geometry import find_sol_pixels
 
 frame0 = 0
 nframes = 10000
@@ -39,53 +40,60 @@ logger.info('Start logging!!!')
 shotlist = [1111208020]
 thresh = 2.5
 
+# Identify peaks in this amplitude range
 minmax = [thresh, 10.0]
+# Identify peaks in this trigger box
 trigger = np.array([40, 50, 16, 48])
 
-# Create coordinate mapping for the pixels
-# This is dummy code, replace with the true coordinate mapping of the input data
-xrg = np.arange(64)
-xx, yy = np.meshgrid(xrg, xrg)
-rz_array = np.zeros([64, 64, 2])
-rz_array[:, :, 0] = xx[:, :]
-rz_array[:, :, 0] = yy[:, :]
-
 for shotnr in shotlist:
-    print 'Processing shot# %d' % shotnr
-    logger.info('Processing shot %d' % shotnr)
-
+    log_str = '*********************** Shot #%10d ' % shotnr
+    try:
+        logger.info(log_str)
+    except:
+        print log_str
+    # Load frames
     frames, fi = load_mdsframes(shotnr, path=datadir, fname='%10d_testframes2.npz' % shotnr, varname='frames_normalized')
-    
-    print 'loaded frames, min = %f, min = %f' % (frames.min(), frames.max())
-    # Load rz_array for frames
-    print '********* Using dummy rz_array **********'
-    #rz_array, transform_data = make_rz_array(fi)
-    #frames[:, 0, 0] = frames.min()
-    #frames[:, 1, 0] = frames.max()
+    # Load separatrix data
+    fname_sep = '%s/%10d_separatrix.sav' % (datadir, shotnr)
+    sep = readsav(fname_sep)
 
+    # #########################################################################
+    # Do blob tracking
+    #
+    trails = blob_tracking_fun(shotnr, frames, trigger, minmax)
+
+    # #########################################################################
+    # Compute geometry data from GPI and plot some blob trails
+    #
+    rz_array, transform_data = make_rz_array(fi)
+    xxi, yyi = np.meshgrid(np.linspace(rz_array[:, :, 0].min(), rz_array[:, :, 0].max(), 64),
+                           np.linspace(rz_array[:, :, 1].min(), rz_array[:, :, 1].max(), 64))
+    xyi = np.concatenate((xxi[:, :, np.newaxis], yyi[:, :, np.newaxis]), axis=2)
     # Compute the indices between LCFS and limiter shadow
-    good_idx = helper_functions.find_sol_pixels(shotnr, fi, datadir='./data')
+    good_idx = find_sol_pixels(sep)
     domain = np.array(good_idx)[:, :].tolist()
 
-
-    print 'Running blob detection.'
-    trails = blob_tracking_fun(shotnr, frames, rz_array,
-                               trigger, minmax)
-
     for trail in trails[:5]:
-        print 'Plotting trail...'
-        plot_trail_simple(trail, frames, plot_shape=True)
+        # Plot a simple trail
+        #plot_trail_simple(trail, frames, plot_shape=True)
+        # Plot trail with GPI geometry overlay
+        plot_trail_geom(trail, frames, rz_array=rz_array, xyi=xyi, 
+                trigger_box=trigger, sep_data=sep, 
+                plot_com=True, plot_max=False, plot_geom=True) 
 
-
-    #trails = blob_tracking_fun(shotnr, frames, fi,
-    #                           minmax=[thresh, 10.0], logger=logger)
-    #logger.info('Blob detection found %d blobs' % len(trails))
-    #print 'Found %d blobs' % len(trails)
+    # #########################################################################
+    # Save trails for later use
+    #
+    
     #picklefile = open('%d/%d_trails_thresh%2d.pkl' % (shotnr, shotnr,
     #                                                  int(10 * thresh)),
     #                  'wb')
     #cPickle.dump(trails, picklefile, -1)
     #picklefile.close()
+
+    # #########################################################################
+    # Compute blobtrail statistics
+    #
 
     #print 'Computing trail statistics'
     #blob_amps, blob_ell, blob_vel, blob_shape, blobs_used_good_domain, fail_list = blob_statistics.statistics_blob_sol(shotnr, trails, fi, frames=frames, good_domain=domain, logger=logger)
@@ -97,5 +105,9 @@ for shotnr in shotlist:
     #blob_statistics.plot_blob_scatter1(blob_amps, blob_ell, blob_vel,
     #                                   blob_shape, shotnr, fail_list,
     #                                   save=False, logger=logger)
+
+    # ########################################################################
+    # 
+    #
 
 #    np.savez('shot_100819/ds_thresh%2d_results_20120709.npz' % (int(10*thresh)), blob_amps = blob_amps, blob_ell = blob_ell, blob_vel = blob_vel, blob_shape = blob_shape, fail_list = fail_list )

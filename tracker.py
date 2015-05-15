@@ -18,7 +18,8 @@ until no sufficiently large region can be identified
 """
 
 import numpy as np
-from helper_functions import com, find_closest_region, width_gaussian, TrackingError
+from geometry import com
+from helper_functions import find_closest_region, width_gaussian, TrackingError
 
 def tracker_geom(frames, x0, event, thresh_amp, thresh_dist, blob_ext,
                  plots=False, verbose=False):

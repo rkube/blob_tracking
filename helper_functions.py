@@ -19,8 +19,6 @@ Helper functions to make blob analysis and tracking easier
 import numpy as np
 import pymorph as pm
 import matplotlib.pyplot as plt
-# from phantom_helper import make_rz_array
-# from scipy.interpolate import griddata
 from scipy.optimize import leastsq
 from scipy.io import readsav
 
@@ -35,66 +33,19 @@ def frac_to_idx(frac, f_min, f_max, nbins):
                     (f_max - f_min)).astype('int')
 
 
-def com(array, xx=None, yy=None):
-    """
-    Return the center of mass position of the array x_com and y_com
-    x_com = int(x * array) / int(array),
-    y_com = int(y * array) / int(array)
-    If xx and yy are not specified, use x = 0,1,...,np.shape(array)[0],
-    and y = 0, 1, ..., np.shape(array)[1]
-
-    Returns
-        x_com, y_com
-    """
-    array = array.astype('float')
-    if (xx is None and yy is None):
-        xx, yy = np.meshgrid(np.arange(0, array.shape[0], 1.0),
-                             np.arange(0, array.shape[1], 1.0))
-        # If dx and dy are not specified, assume a regularly spaced grid
-        return ((xx * array).sum() / array.sum(),
-                (yy * array).sum() / array.sum())
-    else:
-        # Compute the increments in x and y
-        dx = np.zeros_like(xx)
-        dy = np.zeros_like(yy)
-        dx[:, :-1] = xx[:, 1:] - xx[:, :-1]
-        dx[:, -1] = dx[:, -2]
-
-        dy[:-1, :] = yy[1:, :] - yy[:-1, :]
-        dy[-2, :] = dy[-1, :]
-        # Surface element
-        dA = np.abs(dx) * np.abs(dy)
-        return ((xx * array * dA).sum() / (array * dA).sum(),
-                (yy * array * dA).sum() / (array * dA))
-
-
-def com_rz(array, RR, zz):
-    """
-    Return the center of mass position on the irregulary spaced RR, zz array:
-    R_com = int ( R * n * dA ) / int ( n * dA ), along second dimension
-    z_com = int ( z * n * dA ) / int ( n * dA ), along first dimension
-    """
-    array = array.astype("float")
-    dR, dz = np.zeros_like(RR), np.zeros_like(zz)
-    dR[:, :-1] = RR[:, 1:] - RR[:, :-1]
-    dR[:, -1] = dR[:, -2]
-    dz[:-1, :] = zz[1:, :] - zz[:-1, :]
-    dz[-1, :] = dz[:, -2]
-
-    dA = np.abs(dR) * np.abs(dz)
-
-    # COM along second dimension, COM along first dimension
-    return((RR * array * dA).sum() / (array * dA).sum(),
-           (zz * array * dA).sum() / (array * dz).sum())
-    # return np.sum( RR * array * dR * dz ) / np.sum (array * dR * dz ) ,\
-    #     np.sum( zz * array * dR * dz ) / np.sum (array * dR * dz )
-
 
 def fwhm(array):
     """
     Computes the full width half maximum of a 1-d array
     Returns the indices of the array elements left and right closest to the
     maximum that cross below half the maximum value
+
+    Input:
+        array:    ndarray
+
+    Output:
+        idx_arr:  ndarray, Indices of the array left and right closest to the
+                           maximum where array crosses below half its maximum
     """
 
     assert (type(array) == type(np.ndarray([])))
@@ -121,10 +72,15 @@ def fwhm(array):
         # within 0..n-1
         right_idx = array.size() - 1
 
-    return np.array([int(left_idx), int(right_idx)])
+    idx_arr = np.array([int(left_idx), int(right_idx)])
+
+    return idx_arr
 
 
 class gauss_fixed_mu(object):
+    """
+    Gaussian function functor with fixed mean
+    """
     def __init__(self, mu):
         self.mu = mu
     def __call__(self, x, sigma):
@@ -293,52 +249,6 @@ def find_closest_region(frame, thresh_amp, x0, max_dist=2.0, verbose=False):
 
     return (x_centroid, event_masked)
 
-
-
-def find_sol_pixels(shotnr, frame_info=None, rz_array=None,
-                    datadir='/Users/ralph/source/blob_tracking/test_data'):
-    """
-    Returns the indices of the pixels in between the separatrix and the LCFS.
-    """
-
-    s = readsav('%s/separatrix.sav' % (datadir), verbose=False)
-
-    gap_idx_mask = ((s['rmid'].reshape(64, 64) > s['rmid_sepx']) &
-                    (s['rmid'].reshape(64, 64) < s['rmid_lim']))
-
-    return np.argwhere(gap_idx_mask)
-
-
-def find_sol_mask(shotnr, frame_info=None, rz_array=None,
-                  datadir='/Users/ralph/source/blob_tracking/test_data'):
-    """
-    Returns a mask for the pixels in between the separatrix and the LCFS.
-    """
-    s = readsav('%s/separatrix.sav' % (datadir), verbose=False)
-
-    return ((s['rmid'].reshape(64, 64) > s['rmid_sepx']) &
-            (s['rmid'].reshape(64, 64) < s['rmid_lim']))
-
-
-def blob_in_sol(trail, good_domain, logger=None):
-    """
-    Returns a bool array of the indices, in which the COM of a blob is
-    in the SOL (good_domain)
-    """
-
-    try:
-        # Consider only the positions, where the blob is in the good domain
-        blob_pos = trail.get_trail_com()
-        good_pos_idx = np.array([i in good_domain for i in
-                                 blob_pos.round().astype('int').tolist()])
-
-    except:
-        good_pos_idx = np.ones_like(trail.get_tau())
-        if (logger is not None):
-            logger.info('This should not happen. Ignoring trigger domain')
-
-    good_pos_idx = good_pos_idx[:-1]
-    return good_pos_idx
 
 
 # End of file helper_functions.py
