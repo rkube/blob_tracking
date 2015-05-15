@@ -77,7 +77,7 @@ def blob_tracking(shotnr, frames, rz_array, trigger=np.array([40, 50, 16, 48]),
 
     # Define the events we will analyze
 #    event_range = np.arange(num_events)
-    event_range = np.arange(46, 47)
+    event_range = np.arange(5)
 #    num_events  = np.size(event_range)
 
     # Get R,z projection, grid data
@@ -117,8 +117,8 @@ def blob_tracking(shotnr, frames, rz_array, trigger=np.array([40, 50, 16, 48]),
                                        doplots=False)
 
         print ''
-        print 'blob trail max:', newtrail.get_trail_max()
-        print 'blob trail COM:', newtrail.get_trail_com()
+        print 'blob trail max:', newtrail.get_xymax()
+        print 'blob trail COM:', newtrail.get_xycom()
         print ''
         print '=========================================================='
 
@@ -146,24 +146,10 @@ def blob_tracking(shotnr, frames, rz_array, trigger=np.array([40, 50, 16, 48]),
         #        print log_str
         #    continue
 
-        print 'Computing blob width'
-        try:
-            newtrail.compute_width_gaussian(frames, rz_array, position='MAX',
-                                            i_size_max=10, plots=False)
-
-        except:
-            fail_list.append(idx)
-            failcount += 1
-            log_str = 'Peak %d: Unable to compute FWHM' % (idx)
-            try:
-                logger.info(log_str)
-            except:
-                print log_str
-
-        newtrail.plot_trail(frames, rz_array=rz_array, xyi=xyi,
-                            trigger_box=trigger, sep_data=None,
-                            plot_com=True, plot_shape=True, plot_geom=False,
-                            save_frames=False)
+#        newtrail.plot_trail(frames, rz_array=rz_array, xyi=xyi,
+#                            trigger_box=trigger, sep_data=None,
+#                            plot_com=True, plot_shape=True, plot_geom=False,
+#                            save_frames=False)
         trails.append(newtrail)
 
     return trails

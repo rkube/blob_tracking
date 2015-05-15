@@ -9,15 +9,17 @@ import matplotlib as mpl
 from load_mdsframes import load_mdsframes
 import helper_functions
 from blob_tracking import blob_tracking as blob_tracking_fun
+from plotting import plot_trail_simple
 #from blob_tracking.blob_tracking import blob_tracking as blob_tracking_fun
 #from blob_tracking import blob_statistics
 
-frame0 = 10000
+frame0 = 0
 nframes = 10000
 save = False
 
 # Directory, where frames from mds are stored in
-datadir = '/Volumes/Backup/cmod_data/phantom'
+#datadir = '/Volumes/Backup/cmod_data/phantom'
+datadir = '/Users/ralph/uni/cmod/tmp_data/'
 # Directory where log files and plots are written to
 outdir = '/Users/ralph/uni/cmod'
 logfile = '%s/blob_tracking/blobtracking.log' % (outdir)
@@ -34,7 +36,7 @@ logger.addHandler(file_handle)
 
 logger.info('Start logging!!!')
 
-shotlist = [1100803020]
+shotlist = [1111208020]
 thresh = 2.5
 
 minmax = [thresh, 10.0]
@@ -52,11 +54,8 @@ for shotnr in shotlist:
     print 'Processing shot# %d' % shotnr
     logger.info('Processing shot %d' % shotnr)
 
-    # Directory where we find the frames for the current shot
-    ddir_shot = '%s/%10d' % (datadir, shotnr)
-
-    frames, fi = load_mdsframes(shotnr, test=False, path=ddir_shot)
-    frames = frames[frame0:frame0 + nframes, :, :]
+    frames, fi = load_mdsframes(shotnr, path=datadir, fname='%10d_testframes2.npz' % shotnr, varname='frames_normalized')
+    
     print 'loaded frames, min = %f, min = %f' % (frames.min(), frames.max())
     # Load rz_array for frames
     print '********* Using dummy rz_array **********'
@@ -71,7 +70,12 @@ for shotnr in shotlist:
 
     print 'Running blob detection.'
     trails = blob_tracking_fun(shotnr, frames, rz_array,
-                               trigger, minmax, logger)
+                               trigger, minmax)
+
+    for trail in trails[:5]:
+        print 'Plotting trail...'
+        plot_trail_simple(trail, frames, plot_shape=True)
+
 
     #trails = blob_tracking_fun(shotnr, frames, fi,
     #                           minmax=[thresh, 10.0], logger=logger)

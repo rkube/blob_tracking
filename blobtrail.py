@@ -18,7 +18,8 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from scipy.interpolate import griddata
 from scipy.optimize import leastsq
-from helper_functions import tracker, fwhm, find_closest_region
+from tracker import tracker_geom
+from helper_functions import com, find_closest_region, width_gaussian
 #from plotting.separatrix_line import surface_line
 # from helper_functions import tracker, fwhm, com
 # from separatrix_line import surface_line
@@ -67,44 +68,34 @@ class blobtrail:
         # Number of frames the blob is tracked forwards. Updated in track_forward
         self.tau_f = 0
         # Find the first centroid position
-        x0, dummy = find_closest_region(frames[tau_max, :, :], thresh_amp * event[0], 
+        frame0 = frames[tau_max, :, :]
+        x0, dummy = find_closest_region(frame0, thresh_amp * event[0], 
                                         [event[2], event[3]], 
                                         max_dist = 5.0, verbose=False)
+        # Compute maximum and COM coordinates of the blob within in the first centroid
+        xycom0 = com(dummy)
+        xycom0 = np.array(xycom0)
+        # See com
+        xycom0 = xycom0[::-1]
+        
+        xymax0 = np.unravel_index(dummy.argmax(), frames[0, :, :].shape)
+        xymax0 = np.array(xymax0)
+
+        sigma_rad0, dummy1, dummy2 = width_gaussian(frame0[xymax0[0], :], xymax0[1])
+        sigma_pol0, dummy1, dummy2 = width_gaussian(frame0[:, xymax0[1]], xymax0[0])
 
         # Track blob forwards and backwards, combine results
-        self.track_forward(frames, x0, doplots=True)
-        self.track_backward(frames, x0, doplots=True)
-
-        print 'Tracking done... tau_b = %d, tau_f = %d' % (self.tau_b, self.tau_f)
-        # If the blob cannot be tracked forward and backwards, abort
-        if (self.invalid_fw_tracking and self.invalid_bw_tracking):
-            raise ValueError('Could not track blob, invalid event')
+        self.track_forward(frames, x0, doplots=False)
+        self.track_backward(frames, x0, doplots=False)
 
         # Combine results from forward and backward tracking
         # Values about the blob path [backward, 0, forward]
         self.tau = np.arange(-self.tau_b, self.tau_f + 1)
         self.amp = np.concatenate([self.amp_b[::-1], [event[0]], self.amp_f])
-        self.xycom = np.concatenate([self.amp_b[::-1], self.amp_f])
-        self.xymax = np.concatenate([self.amp_b[::-1], [event[2], event[3]], self.amp_f])
-        # Amplitude of the blob
-        #self.amp = np.concatenate((self.amp_b[self.tau_b:0:-1],
-        #                           self.amp_f[:max(1, self.tau_f)]), axis=0)
-        # x- and y- position of the blob
-        #self.xycom = np.concatenate((self.xycom_b[self.tau_b:0:-1, :],
-        #                             self.xycom_f[:max(1, self.tau_f), :]),
-        #                            axis=0)
-        #self.xymax = np.concatenate((self.xymax_b[self.tau_b:0:-1, :],
-        #                             self.xymax_f[:max(1, self.tau_f), :]),
-        #                            axis=0).astype('int')
-        # The shape of the blob
-        #self.blob_shape = (self.blob_shape_b + self.blob_shape_f) /\
-        #    (self.tau_b + max(1, self.tau_f))
-        # Radial and poloidal width of the blob
-
-        self.fwhm_rad = np.zeros_like(self.amp)
-        self.fwhm_pol = np.zeros_like(self.amp)
-        self.ell_rad = np.zeros_like(self.amp)
-        self.ell_pol = np.zeros_like(self.amp)
+        self.xycom = np.concatenate([self.xycom_b[::-1], xycom0[np.newaxis, :], self.xycom_f])
+        self.xymax = np.concatenate([self.xymax_b[::-1], xymax0[np.newaxis, :], self.xymax_f])
+        self.ell_rad = np.concatenate([self.width_rad_b[::1], np.array([sigma_rad0]), self.width_rad_f])
+        self.ell_pol = np.concatenate([self.width_pol_b[::-1], np.array([sigma_pol0]), self.width_pol_f])
 
     def track_backward(self, frames, x0, doplots=False):
         """
@@ -117,217 +108,21 @@ class blobtrail:
         # frames[[0, -1, -2, .., -tau_max], :, :]
         idx_frames = self.tau_max + np.arange(0, -self.tau_max - 1, -1, dtype='int')
 
-        res = tracker(frames[idx_frames, :, :], x0, self.event,
-                      self.thresh_amp, self.thresh_dist, self.blob_ext,
-                      plots=doplots, verbose=False)
+        res = tracker_geom(frames[idx_frames, :, :], x0, self.event,
+                           self.thresh_amp, self.thresh_dist, self.blob_ext,
+                           plots=doplots, verbose=False)
         self.tau_b, self.amp_b, self.xycom_b, self.xymax_b, self.width_rad_b, self.width_pol_b = res
-
-        print 'Backwards tracking:'
-        print 'xycom = ', self.xycom_b
-        print 'xymax = ', self.xymax_b
-        print 'width_rad = ', self.width_rad_b
-        print 'width_pol = ', self.width_pol_b
 
 
     def track_forward(self, frames, x0, doplots=False):
         """
         Track blob forward from frame0
         """
-        print 'Tracking forward...'
-        res = tracker(frames[self.tau_max:, :, :], x0, self.event,
-                      self.thresh_amp, self.thresh_dist, self.blob_ext,
-                      plots=doplots, verbose=False)
+        #print 'Tracking forward...'
+        res = tracker_geom(frames[self.tau_max:, :, :], x0, self.event,
+                           self.thresh_amp, self.thresh_dist, self.blob_ext,
+                           plots=doplots, verbose=False)
         self.tau_f, self.amp_f, self.xycom_f, self.xymax_f, self.width_rad_f, self.width_pol_f = res
-        print 'Forwards tracking:'
-        print 'xycom = ', self.xycom_f
-        print 'xymax = ', self.xymax_f
-        print 'width_rad = ', self.width_rad_f
-        print 'width_pol = ', self.width_pol_f
-
-    def plot_trail(self, frames, rz_array=None, xyi=None, trigger_box=None,
-                   sep_data=None, plot_com=False, plot_max=False,
-                   plot_shape=False, plot_geom=False, save_frames=False):
-        """
-        Plot the motion of the blob. The GPI frames are to be supplied
-        externally
-
-        Input:
-            frames:         GPI data
-            plot_com:       Mark the center of mass of the blob
-            plot_max:       Mark the maximum of the blob
-            plot_shape:     If available, mark the FWHM of the blob
-            plot_geom:      Overplot triggering blox, limiter shadow and
-                            separatrix
-            save_frames:    Save the frames
-
-        """
-        print 'Plotting the blob event from frame %d-%d' %\
-            (self.event[1] + self.frame0 - self.tau_b,
-             self.event[1] + self.frame0 + self.tau_f)
-        minval = (frames[self.event[1] + self.frame0 - self.tau_b:
-                         self.event[1] + self.frame0 + self.tau_f, :, :]).min()
-        maxval = (frames[self.event[1] + self.frame0 - self.tau_b:
-                         self.event[1] + self.frame0 + self.tau_f, :, :]).max()
-        frames[self.event[1] + self.frame0 - self.tau_b:
-               self.event[1] + self.frame0 + self.tau_f, 0, 0] = minval
-        frames[self.event[1] + self.frame0 - self.tau_b:
-               self.event[1] + self.frame0 + self.tau_f, 0, 1] = maxval
-        print 'min = %f, max = %f' % (minval, maxval)
-
-        print 'plotting from %d - %d' % (self.tau_b, self.tau_f)
-
-        for f_idx, tau in enumerate(np.arange(-self.tau_b, self.tau_f)):
-            plt.figure()
-            plt.title('frame %05d' % (self.event[1] + self.frame0 + tau))
-            plt.xlabel('R / cm')
-            plt.ylabel('Z / cm')
-
-            # Try plotting everythin in machine coordinates. If it fails,
-            # draw in pixels
-            try:
-                1 / 0
-                zi = griddata(rz_array.reshape(64*64, 2),
-                              frames[self.event[1] +
-                                     self.frame0 + tau, :, :].reshape(64*64),
-                              xyi.reshape(64*64, 2), method='linear')
-#                zi[0] = 5.0#np.max(frames)
-#                zi[1] = 5.0#np.max(frames)
-                plt.contour(xyi[:, :, 0], xyi[:, :, 1], zi.reshape(64, 64),
-                            32, linewidths=0.5, colors='k')
-                plt.contourf(xyi[:, :, 0], xyi[:, :, 1], zi.reshape(64, 64),
-                             32, cmap=plt.cm.hot, levels=np.linspace(0.0,
-                                                                     maxval,
-                                                                     32))
-
-            except:
-                plt.contour(frames[self.event[1] + self.frame0 + tau, :, :],
-                            22, linewidths=0.5, colors='k')
-                plt.contourf(frames[self.event[1] + self.frame0 + tau, :, :],
-                             32, cmap=plt.cm.hot, levels=np.linspace(0.0,
-                                                                     maxval,
-                                                                     32))
-
-            plt.colorbar(ticks=np.arange(0.0, 3.5, 0.5), format='%3.1f')
-
-            if plot_com:
-                try:
-                    1/0
-                    if plot_shape:
-                        frame_xerr = self.fwhm_ell_rad[:f_idx+1]
-                        frame_xerr[:-1] = 0.
-                        frame_yerr = self.fwhm_ell_pol[:f_idx+1]
-                        frame_yerr[:-1] = 0.
-                        plt.errorbar(xyi[self.xycom[:f_idx + 1,
-                                                    0].astype('int'),
-                                         self.xycom[:f_idx + 1,
-                                                    1].astype('int'), 0],
-                                     xyi[self.xycom[:f_idx + 1,
-                                                    0].astype('int'),
-                                         self.xycom[:f_idx + 1,
-                                                    1].astype('int'), 1],
-                                     xerr=frame_xerr, yerr=frame_yerr,
-                                     ecolor='w', linestyle='None',
-                                     mfc='white', mec='green', marker='s')
-
-                    else:
-                        plt.plot(xyi[self.xycom[:f_idx + 1, 0].astype('int'),
-                                     self.xycom[:f_idx + 1, 1].astype('int'),
-                                     0],
-                                 xyi[self.xycom[:f_idx + 1, 0].astype('int'),
-                                     self.xycom[:f_idx + 1, 1].astype('int'),
-                                     1], '-ws')
-
-                    # Set the coordinates for plotting the text field
-                    text_x, text_y = 86.2, -6.
-                except:
-                    plt.plot(self.xycom[:f_idx + 1, 1],
-                             self.xycom[:f_idx + 1, 0], '-bs')
-                    text_x, text_y = 5., 2.
-
-                #if (tau < self.tau_f - 1):
-                #    plt.text(text_x, text_y, '$V_{COM} = (%4.1f, %4.1f)$' %
-                #             (self.get_velocity_com(rz_array)[f_idx, 0],
-                #              self.get_velocity_com(rz_array)[f_idx, 1]),
-                #             fontdict=dict(size=16., color='white',
-                #                           weight='bold'))
-
-            if plot_max:
-                try:
-                    plt.plot(xyi[self.xymax[:f_idx + 1, 0],
-                                 self.xymax[:f_idx + 1, 1], 0],
-                             xyi[self.xymax[:f_idx + 1, 0],
-                                 self.xymax[:f_idx + 1, 1], 1], '-.wo')
-                    text_x, text_y = 86.2, -6.
-
-                except TypeError:
-                    plt.plot(self.xymax[:f_idx+1, 1], self.xymax[:f_idx+1, 0],
-                             '-.wo')
-                    text_x, text_y = 5., 2.
-
-                if (tau < self.tau_f - 1):
-                    plt.text(text_x, text_y, '$V_{max} = (%4.1f, %4.1f)$' %
-                             (self.get_velocity_max(rz_array)[f_idx, 0],
-                              self.get_velocity_max(rz_array)[f_idx, 1]),
-                             fontdict=dict(size=16.,
-                                           color='white', weight='bold'))
-
-            #if plot_geom:
-            #    try:
-            #        # Get the position of the pixels for the separatrix
-            #        # and limiter
-            #        separatrix_pxs = surface_line(sep_data['rmid'].
-            #                                      reshape(64, 64) >
-            #                                      sep_data['rmid_sepx'],
-            #                                      mode='max')
-            #        limiter_pxs = surface_line(sep_data['rmid'].
-            #                                   reshape(64, 64) <
-            #                                   sep_data['rmid_lim'],
-            #                                   mode='min')
-
-            #        # Compute position, width and height of the triggering box
-            #        # tb_lower_left = (xyi[trigger_box[2], trigger_box[0], 0],
-            #        #                  xyi[trigger_box[2], trigger_box[0], 1])
-            #        # tb_width = (xyi[trigger_box[2], trigger_box[1], 0] -
-            #        #             xyi[trigger_box[2], trigger_box[0], 0])
-            #        # tb_height = (xyi[trigger_box[3], trigger_box[0], 1] -
-            #        #              xyi[trigger_box[2], trigger_box[0], 1])
-
-            #        # Plot the triggering domain. Position, height and width
-            #        # are not automatically determined but static values.
-
-            #        triggering_box = mpatches.Rectangle((89.9, -4.5),
-            #                                            width=1.0, height=3.2,
-            #                                            fill=False,
-            #                                            ls='dashdot',
-            #                                            ec='w', lw=3)
-            #        fig = plt.gcf()
-            #        ax = fig.gca()
-            #        ax.add_patch(triggering_box)
-
-            #        # Plot the separatrix
-            #        sep_x = [xyi[i, separatrix_pxs[i], 0] for i in
-            #                 np.arange(64)]
-            #        sep_y = [xyi[i, separatrix_pxs[i], 1] for i in
-            #                 np.arange(64)]
-            #        plt.plot(sep_x, sep_y, 'w--', linewidth=4)
-
-            #        lim_x = [xyi[i, limiter_pxs[i], 0] for i in np.arange(64)]
-            #        lim_y = [xyi[i, limiter_pxs[i], 1] for i in np.arange(64)]
-            #        plt.plot(lim_x, lim_y, 'w-.', linewidth=4)
-
-            #    except:
-            #        print 'Error plotting geometry :('
-
-            if save_frames:
-                F = plt.gcf()
-                F.savefig('%d/frames/frame_%05d.eps' % (self.shotnr,
-                                                        self.event[1] +
-                                                        self.frame0 + tau))
-                plt.close()
-
-        plt.show()
-
-
 
 
     def get_frame0(self):
@@ -335,30 +130,22 @@ class blobtrail:
         The index for the frame where the blob was detected
         """
         return self.tau_b
+
     # If a rz_array is passed, compute positions and velocities in R-Z space. Otherwise return
     # positions and velocities in pixel space
-    def get_trail_com(self, rz_array = None):
+
+    def get_xycom(self):
         """
-        Return the position of the blob COM. Either in pixel or in (R,Z) coordinates if rz_array
-        is passed.
+        Return the COM position of the blob
         """
+        return self.xycom
 
-        if ( rz_array == None ):
-            return self.xycom
-
-        return rz_array[ self.xycom[:,0].astype('int'), self.xycom[:,1].astype('int'), :]
-
-
-    def get_trail_max(self, rz_array = None):
+    def get_xymax(self):
         """
-        Return the position of the blob maximum. Either in pixel or in (R,Z) coordinates if rz_array
-        is passed.
+        Return the MAX position of the blob
         """
-        if ( rz_array == None ):
-            return self.xymax
+        return self.xymax
 
-        # Remember xycom[:,1] is the radial (X) index which corresponds to R
-        return rz_array[ self.xymax[:,0].astype('int'), self.xymax[:,1].astype('int'), :]
 
 
     def get_velocity_max(self, rz_array = None):
@@ -388,31 +175,31 @@ class blobtrail:
             return self.xycom[1:, :] - self.xycom[:-1, :]
 
 
-    def get_ell_pol(self):
+    def get_fwhm_pol(self):
         """
         Return the previously computed poloidal width of the blob
         """
         return self.fwhm_ell_pol
 
 
-    def get_ell_rad(self):
+    def get_fwhm_rad(self):
         """
         Return the previously computed radial width of the blob
         """
         return self.fwhm_ell_rad
 
 
-    def get_err_ell_pol(self):
+    def get_ell_pol(self):
         """
         Return error from length fitting
         """
-        return self.fwhm_err_ell_pol
+        return self.ell_pol
 
-    def get_err_ell_rad(self):
+    def get_ell_rad(self):
         """
         Return error from length fitting
         """
-        return self.fwhm_err_ell_rad
+        return self.ell_rad
 
 
     def get_amp(self):
@@ -466,6 +253,212 @@ class blobtrail:
 
         print 'blob_shape finished'
         return blob_shape
+
+#    def get_trail_com(self, rz_array = None):
+#        """
+#        Return the position of the blob COM. Either in pixel or in (R,Z) coordinates if rz_array
+#        is passed.
+#        """
+#
+#        if ( rz_array == None ):
+#            return self.xycom
+#
+#        return rz_array[ self.xycom[:,0].astype('int'), self.xycom[:,1].astype('int'), :]
+#
+#
+#    def get_trail_max(self, rz_array = None):
+#        """
+#        Return the position of the blob maximum. Either in pixel or in (R,Z) coordinates if rz_array
+#        is passed.
+#        """
+#        if ( rz_array == None ):
+#            return self.xymax
+#
+#        # Remember xycom[:,1] is the radial (X) index which corresponds to R
+#        return rz_array[ self.xymax[:,0].astype('int'), self.xymax[:,1].astype('int'), :]
+
+#    def plot_trail(self, frames, rz_array=None, xyi=None, trigger_box=None,
+#                   sep_data=None, plot_com=False, plot_max=False,
+#                   plot_shape=False, plot_geom=False, save_frames=False):
+#        """
+#        Plot the motion of the blob. The GPI frames are to be supplied
+#        externally
+#
+#        Input:
+#            frames:         GPI data
+#            plot_com:       Mark the center of mass of the blob
+#            plot_max:       Mark the maximum of the blob
+#            plot_shape:     If available, mark the FWHM of the blob
+#            plot_geom:      Overplot triggering blox, limiter shadow and
+#                            separatrix
+#            save_frames:    Save the frames
+#
+#        """
+#        print 'Plotting the blob event from frame %d-%d' %\
+#            (self.event[1] + self.frame0 - self.tau_b,
+#             self.event[1] + self.frame0 + self.tau_f)
+#        minval = (frames[self.event[1] + self.frame0 - self.tau_b:
+#                         self.event[1] + self.frame0 + self.tau_f, :, :]).min()
+#        maxval = (frames[self.event[1] + self.frame0 - self.tau_b:
+#                         self.event[1] + self.frame0 + self.tau_f, :, :]).max()
+#        frames[self.event[1] + self.frame0 - self.tau_b:
+#               self.event[1] + self.frame0 + self.tau_f, 0, 0] = minval
+#        frames[self.event[1] + self.frame0 - self.tau_b:
+#               self.event[1] + self.frame0 + self.tau_f, 0, 1] = maxval
+#        print 'min = %f, max = %f' % (minval, maxval)
+#
+#        print 'plotting from %d - %d' % (self.tau_b, self.tau_f)
+#
+#        for f_idx, tau in enumerate(np.arange(-self.tau_b, self.tau_f)):
+#            plt.figure()
+#            plt.title('frame %05d' % (self.event[1] + self.frame0 + tau))
+#            plt.xlabel('R / cm')
+#            plt.ylabel('Z / cm')
+#
+#            # Try plotting everythin in machine coordinates. If it fails,
+#            # draw in pixels
+#            try:
+#                1 / 0
+#                zi = griddata(rz_array.reshape(64*64, 2),
+#                              frames[self.event[1] +
+#                                     self.frame0 + tau, :, :].reshape(64*64),
+#                              xyi.reshape(64*64, 2), method='linear')
+##                zi[0] = 5.0#np.max(frames)
+##                zi[1] = 5.0#np.max(frames)
+#                plt.contour(xyi[:, :, 0], xyi[:, :, 1], zi.reshape(64, 64),
+#                            32, linewidths=0.5, colors='k')
+#                plt.contourf(xyi[:, :, 0], xyi[:, :, 1], zi.reshape(64, 64),
+#                             32, cmap=plt.cm.hot, levels=np.linspace(0.0,
+#                                                                     maxval,
+#                                                                     32))
+#
+#            except:
+#                plt.contour(frames[self.event[1] + self.frame0 + tau, :, :],
+#                            22, linewidths=0.5, colors='k')
+#                plt.contourf(frames[self.event[1] + self.frame0 + tau, :, :],
+#                             32, cmap=plt.cm.hot, levels=np.linspace(0.0,
+#                                                                     maxval,
+#                                                                     32))
+#
+#            plt.colorbar(ticks=np.arange(0.0, 3.5, 0.5), format='%3.1f')
+#
+#            if plot_com:
+#                try:
+#                    1/0
+#                    if plot_shape:
+#                        frame_xerr = self.fwhm_ell_rad[:f_idx+1]
+#                        frame_xerr[:-1] = 0.
+#                        frame_yerr = self.fwhm_ell_pol[:f_idx+1]
+#                        frame_yerr[:-1] = 0.
+#                        plt.errorbar(xyi[self.xycom[:f_idx + 1,
+#                                                    0].astype('int'),
+#                                         self.xycom[:f_idx + 1,
+#                                                    1].astype('int'), 0],
+#                                     xyi[self.xycom[:f_idx + 1,
+#                                                    0].astype('int'),
+#                                         self.xycom[:f_idx + 1,
+#                                                    1].astype('int'), 1],
+#                                     xerr=frame_xerr, yerr=frame_yerr,
+#                                     ecolor='w', linestyle='None',
+#                                     mfc='white', mec='green', marker='s')
+#
+#                    else:
+#                        plt.plot(xyi[self.xycom[:f_idx + 1, 0].astype('int'),
+#                                     self.xycom[:f_idx + 1, 1].astype('int'),
+#                                     0],
+#                                 xyi[self.xycom[:f_idx + 1, 0].astype('int'),
+#                                     self.xycom[:f_idx + 1, 1].astype('int'),
+#                                     1], '-ws')
+#
+#                    # Set the coordinates for plotting the text field
+#                    text_x, text_y = 86.2, -6.
+#                except:
+#                    plt.plot(self.xycom[:f_idx + 1, 1],
+#                             self.xycom[:f_idx + 1, 0], '-bs')
+#                    text_x, text_y = 5., 2.
+#
+#                #if (tau < self.tau_f - 1):
+#                #    plt.text(text_x, text_y, '$V_{COM} = (%4.1f, %4.1f)$' %
+#                #             (self.get_velocity_com(rz_array)[f_idx, 0],
+#                #              self.get_velocity_com(rz_array)[f_idx, 1]),
+#                #             fontdict=dict(size=16., color='white',
+#                #                           weight='bold'))
+#
+#            if plot_max:
+#                try:
+#                    plt.plot(xyi[self.xymax[:f_idx + 1, 0],
+#                                 self.xymax[:f_idx + 1, 1], 0],
+#                             xyi[self.xymax[:f_idx + 1, 0],
+#                                 self.xymax[:f_idx + 1, 1], 1], '-.wo')
+#                    text_x, text_y = 86.2, -6.
+#
+#                except TypeError:
+#                    plt.plot(self.xymax[:f_idx+1, 1], self.xymax[:f_idx+1, 0],
+#                             '-.wo')
+#                    text_x, text_y = 5., 2.
+#
+#                if (tau < self.tau_f - 1):
+#                    plt.text(text_x, text_y, '$V_{max} = (%4.1f, %4.1f)$' %
+#                             (self.get_velocity_max(rz_array)[f_idx, 0],
+#                              self.get_velocity_max(rz_array)[f_idx, 1]),
+#                             fontdict=dict(size=16.,
+#                                           color='white', weight='bold'))
+#
+#            #if plot_geom:
+#            #    try:
+#            #        # Get the position of the pixels for the separatrix
+#            #        # and limiter
+#            #        separatrix_pxs = surface_line(sep_data['rmid'].
+#            #                                      reshape(64, 64) >
+#            #                                      sep_data['rmid_sepx'],
+#            #                                      mode='max')
+#            #        limiter_pxs = surface_line(sep_data['rmid'].
+#            #                                   reshape(64, 64) <
+#            #                                   sep_data['rmid_lim'],
+#            #                                   mode='min')
+#
+#            #        # Compute position, width and height of the triggering box
+#            #        # tb_lower_left = (xyi[trigger_box[2], trigger_box[0], 0],
+#            #        #                  xyi[trigger_box[2], trigger_box[0], 1])
+#            #        # tb_width = (xyi[trigger_box[2], trigger_box[1], 0] -
+#            #        #             xyi[trigger_box[2], trigger_box[0], 0])
+#            #        # tb_height = (xyi[trigger_box[3], trigger_box[0], 1] -
+#            #        #              xyi[trigger_box[2], trigger_box[0], 1])
+#
+#            #        # Plot the triggering domain. Position, height and width
+#            #        # are not automatically determined but static values.
+#
+#            #        triggering_box = mpatches.Rectangle((89.9, -4.5),
+#            #                                            width=1.0, height=3.2,
+#            #                                            fill=False,
+#            #                                            ls='dashdot',
+#            #                                            ec='w', lw=3)
+#            #        fig = plt.gcf()
+#            #        ax = fig.gca()
+#            #        ax.add_patch(triggering_box)
+#
+#            #        # Plot the separatrix
+#            #        sep_x = [xyi[i, separatrix_pxs[i], 0] for i in
+#            #                 np.arange(64)]
+#            #        sep_y = [xyi[i, separatrix_pxs[i], 1] for i in
+#            #                 np.arange(64)]
+#            #        plt.plot(sep_x, sep_y, 'w--', linewidth=4)
+#
+#            #        lim_x = [xyi[i, limiter_pxs[i], 0] for i in np.arange(64)]
+#            #        lim_y = [xyi[i, limiter_pxs[i], 1] for i in np.arange(64)]
+#            #        plt.plot(lim_x, lim_y, 'w-.', linewidth=4)
+#
+#            #    except:
+#            #        print 'Error plotting geometry :('
+#
+#            if save_frames:
+#                F = plt.gcf()
+#                F.savefig('%d/frames/frame_%05d.eps' % (self.shotnr,
+#                                                        self.event[1] +
+#                                                        self.frame0 + tau))
+#                plt.close()
+#
+#        plt.show()
 
 #    def compute_fwhm(self, frames, rz_array=None, position='COM', norm=False,
 #                     plots=False):
