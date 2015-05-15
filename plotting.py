@@ -123,8 +123,21 @@ def plot_trail_geom(blobtrail, frames, rz_array=None, xyi=None, trigger_box=None
     print 'min = %f, max = %f' % (minval, maxval)
     print 'plotting from %d - %d' % (tau[0], tau[-1])
 
+    # Number of levels in contour plots
     num_levels = 64
     color_levels = np.linspace(minval, maxval, num_levels)
+
+    # Positiion of velocity label
+    text_x, text_y = 86.2, -6.
+    # Font of velocity label
+    vlabel_font = dict(size=16., color='white', weight='bold')
+
+    # Blob velocity
+    vmax = velocity_max(blobtrail, rz_array)
+    vcom = velocity_com(blobtrail, rz_array)
+
+    print 'mean(vmax) rad=%f, pol=%f' % (vmax.mean(axis=0)[0], vmax.mean(axis=0)[1])
+    print 'mean(vcom) rad=%f, pol=%f' % (vcom.mean(axis=0)[0], vcom.mean(axis=0)[1])
 
     for fidx, tau_idx in zip(frame_idx, tau):
         plt.figure()
@@ -133,7 +146,6 @@ def plot_trail_geom(blobtrail, frames, rz_array=None, xyi=None, trigger_box=None
         plt.ylabel('Z / cm')
 
         # Try plotting everythin in machine coordinates. If it fails draw in pixels
-        #try:
         zi = griddata(rz_array.reshape(64 * 64, 2),
                 frames[fidx, :, :].reshape(64 * 64),
                 xyi.reshape(64 * 64, 2), method='linear')
@@ -161,40 +173,39 @@ def plot_trail_geom(blobtrail, frames, rz_array=None, xyi=None, trigger_box=None
             # Interpolate width from pixel to physical units
             ip_rad = interp1d(np.arange(64), xyi[xycom[tau_idx, 0].astype('int'), :, 0], kind='quadratic')
             ip_pol = interp1d(np.arange(64), xyi[:, xycom[tau_idx, 1].astype('int'), 1], kind='quadratic')
-            frame_xerr = ip_rad(np.array([xycom[tau_idx, 0] - ell_rad[tau_idx], xycom[tau_idx, 0] + ell_rad[tau_idx]]))
-            frame_yerr = ip_pol(np.array([xycom[tau_idx, 0] - ell_pol[tau_idx], xycom[tau_idx, 0] + ell_pol[tau_idx]]))
+            # lower and upper 1-sigma intervall of com position in pixel coordinates
+            # Extend these intervals not out of bounds in pixel coordinates, otherwise interp1d throws ValueError
+            sigma_x_px = np.array([max(xycom[tau_idx, 0] - ell_rad[tau_idx], 0), min(xycom[tau_idx, 0] + ell_rad[tau_idx], 63)])
+            sigma_x = ip_rad(sigma_x_px)
+            sigma_y_px = np.array([max(xycom[tau_idx, 0] - ell_pol[tau_idx], 0), min(xycom[tau_idx, 0] + ell_pol[tau_idx], 63)])
+            sigma_y = ip_rad(sigma_y_px)
+            #frame_xerr = ip_rad(np.array([xycom[tau_idx, 0] - ell_rad[tau_idx], xycom[tau_idx, 0] + ell_rad[tau_idx]]))
+            #frame_yerr = ip_pol(np.array([xycom[tau_idx, 0] - ell_pol[tau_idx], xycom[tau_idx, 0] + ell_pol[tau_idx]]))
 
-            frame_xerr = np.abs(frame_xerr[1] - frame_xerr[0])
-            frame_yerr = np.abs(frame_yerr[1] - frame_yerr[0])
+            sigma_x = np.abs(sigma_x[1] - sigma_x[0])
+            sigma_y = np.abs(sigma_y[1] - sigma_y[0])
             # Plot current blob position with error bars
             plt.errorbar(xyi[xycom[tau_idx, 0].astype('int'),
                              xycom[tau_idx, 1].astype('int'), 0],
                          xyi[xycom[tau_idx, 0].astype('int'),
                              xycom[tau_idx, 1].astype('int'), 1],
-                         xerr=frame_xerr, yerr=frame_yerr, ecolor='w', linestyle='None', mfc='white', mec='green', marker='s')
+                         xerr=sigma_x, yerr=sigma_y, ecolor='w', linestyle='None', mfc='white', mec='green', marker='s')
 
             # Set the coordinates for plotting the text field
-            text_x, text_y = 86.2, -6.
 
             if (tau_idx > 0):
-                plt.text(text_x, text_y, '$V_{COM} = (%4.1f, %4.1f)$' %
-                         (velocity_com(blobtrail, rz_array)[tau_idx - 1, 0],
-                          velocity_com(blobtrail, rz_array)[tau_idx - 1, 1]),
-                          fontdict=dict(size=16., color='white',
-                                        weight='bold'))
+                str_vcom = r"$V_\mathrm{COM} = (%4.1f, %4.1f)$" % (vcom[tau_idx - 1, 0], vcom[tau_idx - 1, 1])
+                plt.text(text_x, text_y, str_vcom, fontdict=vlabel_font)
 
         if plot_max:
             plt.plot(xyi[xymax[:tau_idx + 1, 0].astype('int'),
                          xymax[:tau_idx + 1, 1].astype('int'), 0],
                      xyi[xymax[:tau_idx + 1, 0].astype('int'),
                          xymax[:tau_idx + 1, 1].astype('int'), 1], '-.wo')
-            text_x, text_y = 86.2, -6.
 
             if (tau_idx > 0): 
-                vmax_str = r"$V_{max} = (%4.1f, %4.1f)$" % (velocity_max(blobtrail, rz_array=rz_array)[tau_idx - 1, 0],
-                                                            velocity_max(blobtrail, rz_array=rz_array)[tau_idx - 1, 1]),
-                plt.text(text_x, text_y, vmax_str, 
-                         fontdict=dict(size=16., color='white', weight='bold'))
+                str_vmax = r"$V_{max} = (%4.1f, %4.1f)$" % (vmax[tau_idx - 1, 0], vmax[tau_idx - 1, 1])
+                plt.text(text_x, text_y, str_vmax, fontdict=vlabel_font)
 
         if plot_geom:
             # Get the position of the pixels for the separatrix
@@ -208,19 +219,19 @@ def plot_trail_geom(blobtrail, frames, rz_array=None, xyi=None, trigger_box=None
                                        sep_data['rmid_lim'],
                                        mode='min')
 
-                # Compute position, width and height of the triggering box
-                # tb_lower_left = (xyi[trigger_box[2], trigger_box[0], 0],
-                #                  xyi[trigger_box[2], trigger_box[0], 1])
-                # tb_width = (xyi[trigger_box[2], trigger_box[1], 0] -
-                #             xyi[trigger_box[2], trigger_box[0], 0])
-                # tb_height = (xyi[trigger_box[3], trigger_box[0], 1] -
-                #              xyi[trigger_box[2], trigger_box[0], 1])
+            # Compute position, width and height of the triggering box
+            tb_lower_left = (xyi[trigger_box[2], trigger_box[0], 0],
+                             xyi[trigger_box[2], trigger_box[0], 1])
+            tb_width = (xyi[trigger_box[2], trigger_box[1], 0] -
+                        xyi[trigger_box[2], trigger_box[0], 0])
+            tb_height = (xyi[trigger_box[3], trigger_box[0], 1] -
+                         xyi[trigger_box[2], trigger_box[0], 1])
 
-                # Plot the triggering domain. Position, height and width
-                # are not automatically determined but static values.
+            # Plot the triggering domain. Position, height and width
+            # are not automatically determined but static values.
 
-            triggering_box = mpatches.Rectangle((89.9, -4.5),
-                                                width=1.0, height=3.2,
+            triggering_box = mpatches.Rectangle(tb_lower_left,
+                                                width=tb_width, height=tb_height,
                                                 fill=False,
                                                 ls='dashdot',
                                                 ec='w', lw=3)

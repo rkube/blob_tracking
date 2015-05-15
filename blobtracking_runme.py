@@ -80,7 +80,7 @@ for shotnr in shotlist:
     sol_px = find_sol_pixels(sep)
     #domain = np.array(good_idx)[:, :].tolist()
 
-    #for trail in trails[-1:]:
+    #for trail in trails:
     #    # Plot a simple trail
     #    #plot_trail_simple(trail, frames, plot_shape=True)
     #    # Plot trail with GPI geometry overlay

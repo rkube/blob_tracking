@@ -77,8 +77,13 @@ def velocity_analysis(trails, frames, sol_px, rz_array, xyi):
         # We compute the blob velocity with a centered difference scheme.
         # Thus, when indexing the velocity with good_pos_idx, we have to discard
         # the first and last position
-        blob_vcom_rad[idx] = geometry.velocity_max(trail, rz_array)[good_pos_idx[1:-1]].mean(axis=0)[1]
-        blob_vcom_pol[idx] = geometry.velocity_max(trail, rz_array)[good_pos_idx[1:-1]].mean(axis=0)[0]
+        vcom = geometry.velocity_com(trail, rz_array)
+        print 'mean(Vcom):rad=%f, pol=%f' % (vcom.mean(axis=0)[0], vcom.mean(axis=0)[1])
+
+        blob_vcom_rad[idx] = vcom[good_pos_idx[1:]].mean(axis=0)[0]
+        blob_vcom_pol[idx] = vcom[good_pos_idx[1:]].mean(axis=0)[1]
+
+
 
     title_str = "%d trails" % (len(trails))
 

@@ -174,9 +174,9 @@ def velocity_max(trail, rz_array=None, dt=2.5e-6):
     xymax = trail.get_xymax().astype('int')
 
     try:
-        vmax = 5e-3 * (rz_array[xymax[2:, 0], xymax[2:, 1], :]  - rz_array[xymax[:-2, 0], xymax[:-2, 1], :]) / dt
+        vmax = 1e-2 * (rz_array[xymax[1:, 0], xymax[1:, 1], :]  - rz_array[xymax[:-1, 0], xymax[:-1, 1], :]) / dt
     except TypeError:
-        vmax = xymax[2:, :] - xymax[:-2, :]
+        vmax = xymax[1:, :] - xymax[:-1, :]
 
     return (vmax)
 
@@ -197,9 +197,9 @@ def velocity_com(trail, rz_array=None, dt=2.5e-6):
     xycom = trail.get_xycom().astype('int')
 
     try:
-        vmax = 5e-3 * (rz_array[xycom[2:, 0], xycom[2:, 1], :]  - rz_array[xycom[:-2, 0], xycom[:-2, 1], :]) / dt
+        vmax = 1e-2 * (rz_array[xycom[1:, 0], xycom[1:, 1], :]  - rz_array[xycom[:-1, 0], xycom[:-1, 1], :]) / dt
     except TypeError:
-        vmax = xycom[2:, :] - xycom[:-2, :]
+        vmax = xycom[1:, :] - xycom[:-1, :]
 
     return (vmax)
 
