@@ -77,8 +77,6 @@ def find_sol_pixels(s):
               /home/terry/gpi/phantom/retrieve_phantom_RZ_array.pro
               /home/rkube/IDL/separatrix.pro,
     """
-
-
     gap_idx_mask = ((s['rmid'].reshape(64, 64) > s['rmid_sepx']) &
                     (s['rmid'].reshape(64, 64) < s['rmid_lim']))
 
@@ -96,16 +94,32 @@ def find_sol_mask(shotnr, frame_info=None, rz_array=None,
             (s['rmid'].reshape(64, 64) < s['rmid_lim']))
 
 
-def blob_in_sol(trail, good_domain, logger=None):
+def blob_in_sol(trail, sol_px , coord='COM', logger=None):
     """
     Returns a bool array of the indices, in which the COM of a blob is
-    in the SOL (good_domain)
+    in the SOL (sol_px)
+
+    Input:
+        trail:   blobtrail object
+        sol_px:  List of tuples that define the SOL
+        coord:   string, either 'COM' or 'MAX'
+
+
+    Output:
+        good_pos_idx: ndarray(bool) Indices, where the trail is recorded in the
+                      domain defined by sol_px
     """
+
+    assert coord in ['COM', 'MAX']
 
     try:
         # Consider only the positions, where the blob is in the good domain
-        blob_pos = trail.get_trail_com()
-        good_pos_idx = np.array([i in good_domain for i in
+        if coord is 'COM':
+            blob_pos = trail.get_xycom()
+        else:
+            blob_pos = trail.get_xymax()
+
+        good_pos_idx = np.array([i in sol_px for i in
                                  blob_pos.round().astype('int').tolist()])
 
     except:
@@ -113,7 +127,7 @@ def blob_in_sol(trail, good_domain, logger=None):
         if (logger is not None):
             logger.info('This should not happen. Ignoring trigger domain')
 
-    good_pos_idx = good_pos_idx[:-1]
+    #good_pos_idx = good_pos_idx[:-1]
     return good_pos_idx
 
 
@@ -129,7 +143,7 @@ def trail_com(trail, rz_array):
     return rz_array[self.xycom[:,0].astype('int'), self.xycom[:,1].astype('int'), :]
 
 
-def get_trail_max(self, rz_array = None):
+def get_trail_max(self, rz_array=None):
     """
     Return the position of the blob maximum. Either in pixel or in (R,Z) coordinates if rz_array
     is passed.
@@ -145,7 +159,9 @@ def velocity_max(trail, rz_array=None, dt=2.5e-6):
     """
     Return the velocity of the blob maximum. 
     Either in pixel / frame of m/s when rz_array is given
-    
+   
+    Use a centered difference scheme, thus size(vmax) = len(trail) - 2
+
     Input:
         trail:    blobtrail
         rz_array: ndarray, axis0=radial, axis1=poloidal, axis2=(R,Z) in cm
@@ -158,15 +174,16 @@ def velocity_max(trail, rz_array=None, dt=2.5e-6):
     xymax = trail.get_xymax().astype('int')
 
     try:
-        vmax = 1e-2 * (rz_array[xymax[1:, 0], xymax[1:, 1], :]  - rz_array[xymax[:-1, 0], xymax[:-1, 1], :]) / dt
+        vmax = 5e-3 * (rz_array[xymax[2:, 0], xymax[2:, 1], :]  - rz_array[xymax[:-2, 0], xymax[:-2, 1], :]) / dt
     except TypeError:
-        vmax = xymax[1:, :] - xymax[:-1, :]
+        vmax = xymax[2:, :] - xymax[:-2, :]
 
     return (vmax)
 
 def velocity_com(trail, rz_array=None, dt=2.5e-6):
     """
     Return the velocity of the blob COM. Either in pixel / frame of m/s when rz_array is given
+    Use a centered difference scheme, thus size(vmax) = len(trail) - 2
 
     Input:
         trail:    blobtrail
@@ -180,9 +197,9 @@ def velocity_com(trail, rz_array=None, dt=2.5e-6):
     xycom = trail.get_xycom().astype('int')
 
     try:
-        vmax = 1e-2 * (rz_array[xycom[1:, 0], xycom[1:, 1], :]  - rz_array[xycom[:-1, 0], xycom[:-1, 1], :]) / dt
+        vmax = 5e-3 * (rz_array[xycom[2:, 0], xycom[2:, 1], :]  - rz_array[xycom[:-2, 0], xycom[:-2, 1], :]) / dt
     except TypeError:
-        vmax = xycom[1:, :] - xycom[:-1, :]
+        vmax = xycom[2:, :] - xycom[:-2, :]
 
     return (vmax)
 

@@ -9,6 +9,8 @@ plotting
 
 Plotting routines for blobtrail objects
 
+* plot_trail_simple -> Simple plotting without special geometry
+* plot_trail_geom -> Use outboard midplane geometry of CMOD. Needs geometry and separatrix data
 
 """
 
@@ -131,20 +133,20 @@ def plot_trail_geom(blobtrail, frames, rz_array=None, xyi=None, trigger_box=None
         plt.ylabel('Z / cm')
 
         # Try plotting everythin in machine coordinates. If it fails draw in pixels
-        try:
-            zi = griddata(rz_array.reshape(64 * 64, 2),
-                    frames[fidx, :, :].reshape(64 * 64),
-                    xyi.reshape(64 * 64, 2), method='linear')
-            #plt.contour(xyi[:, :, 0], xyi[:, :, 1], zi.reshape(64, 64),
-            #            32, linewidths=0.5, colors='k')
-            plt.contourf(xyi[:, :, 0], xyi[:, :, 1], zi.reshape(64, 64),
-                         num_levels, cmap=plt.cm.hot, levels=color_levels)
+        #try:
+        zi = griddata(rz_array.reshape(64 * 64, 2),
+                frames[fidx, :, :].reshape(64 * 64),
+                xyi.reshape(64 * 64, 2), method='linear')
+        #plt.contour(xyi[:, :, 0], xyi[:, :, 1], zi.reshape(64, 64),
+        #            32, linewidths=0.5, colors='k')
+        plt.contourf(xyi[:, :, 0], xyi[:, :, 1], zi.reshape(64, 64),
+                     num_levels, cmap=plt.cm.hot, levels=color_levels)
 
-        except:
-            print 'Failed to grid data on rz_array... Drawing in pixels'
-            #plt.contour(frames[self.event[1] + self.frame0 + tau, :, :],
-            #            32, linewidths=0.5, colors='k')
-            plt.contourf(frames[fidx, :, :], num_levels, cmap=plt.cm.hot, levels=color_levels)
+        #except:
+        #    print 'Failed to grid data on rz_array... Drawing in pixels'
+        #    #plt.contour(frames[self.event[1] + self.frame0 + tau, :, :],
+        #    #            32, linewidths=0.5, colors='k')
+        #    plt.contourf(frames[fidx, :, :], num_levels, cmap=plt.cm.hot, levels=color_levels)
         plt.colorbar(ticks=np.arange(minval, maxval, (maxval - minval) / 5.), format='%3.1f')
 
         if plot_com:
@@ -188,10 +190,6 @@ def plot_trail_geom(blobtrail, frames, rz_array=None, xyi=None, trigger_box=None
                          xymax[:tau_idx + 1, 1].astype('int'), 1], '-.wo')
             text_x, text_y = 86.2, -6.
 
-            #except TypeError:
-            #    plt.plot(xymax[:tau_idx+1, 1], xymax[:tau_idx+1, 0], '-.wo')
-            #    text_x, text_y = 5., 2.
-
             if (tau_idx > 0): 
                 vmax_str = r"$V_{max} = (%4.1f, %4.1f)$" % (velocity_max(blobtrail, rz_array=rz_array)[tau_idx - 1, 0],
                                                             velocity_max(blobtrail, rz_array=rz_array)[tau_idx - 1, 1]),
@@ -199,18 +197,16 @@ def plot_trail_geom(blobtrail, frames, rz_array=None, xyi=None, trigger_box=None
                          fontdict=dict(size=16., color='white', weight='bold'))
 
         if plot_geom:
-            #try:
-            if True:
-                # Get the position of the pixels for the separatrix
-                # and limiter
-                separatrix_pxs = surface_line(sep_data['rmid'].
-                                              reshape(64, 64) >
-                                              sep_data['rmid_sepx'],
-                                              mode='max')
-                limiter_pxs = surface_line(sep_data['rmid'].
-                                           reshape(64, 64) <
-                                           sep_data['rmid_lim'],
-                                           mode='min')
+            # Get the position of the pixels for the separatrix
+            # and limiter
+            separatrix_pxs = surface_line(sep_data['rmid'].
+                                          reshape(64, 64) >
+                                          sep_data['rmid_sepx'],
+                                          mode='max')
+            limiter_pxs = surface_line(sep_data['rmid'].
+                                       reshape(64, 64) <
+                                       sep_data['rmid_lim'],
+                                       mode='min')
 
                 # Compute position, width and height of the triggering box
                 # tb_lower_left = (xyi[trigger_box[2], trigger_box[0], 0],
@@ -223,28 +219,26 @@ def plot_trail_geom(blobtrail, frames, rz_array=None, xyi=None, trigger_box=None
                 # Plot the triggering domain. Position, height and width
                 # are not automatically determined but static values.
 
-                triggering_box = mpatches.Rectangle((89.9, -4.5),
-                                                    width=1.0, height=3.2,
-                                                    fill=False,
-                                                    ls='dashdot',
-                                                    ec='w', lw=3)
-                fig = plt.gcf()
-                ax = fig.gca()
-                ax.add_patch(triggering_box)
+            triggering_box = mpatches.Rectangle((89.9, -4.5),
+                                                width=1.0, height=3.2,
+                                                fill=False,
+                                                ls='dashdot',
+                                                ec='w', lw=3)
+            fig = plt.gcf()
+            ax = fig.gca()
+            ax.add_patch(triggering_box)
 
-                # Plot the separatrix
-                sep_x = [xyi[i, separatrix_pxs[i], 0] for i in
-                         np.arange(64)]
-                sep_y = [xyi[i, separatrix_pxs[i], 1] for i in
-                         np.arange(64)]
-                plt.plot(sep_x, sep_y, 'w--', linewidth=4)
+            # Plot the separatrix
+            sep_x = [xyi[i, separatrix_pxs[i], 0] for i in
+                     np.arange(64)]
+            sep_y = [xyi[i, separatrix_pxs[i], 1] for i in
+                     np.arange(64)]
+            plt.plot(sep_x, sep_y, 'w--', linewidth=4)
 
-                lim_x = [xyi[i, limiter_pxs[i], 0] for i in np.arange(64)]
-                lim_y = [xyi[i, limiter_pxs[i], 1] for i in np.arange(64)]
-                plt.plot(lim_x, lim_y, 'w-.', linewidth=4)
+            lim_x = [xyi[i, limiter_pxs[i], 0] for i in np.arange(64)]
+            lim_y = [xyi[i, limiter_pxs[i], 1] for i in np.arange(64)]
+            plt.plot(lim_x, lim_y, 'w-.', linewidth=4)
 
-            #except:
-            #    print 'Error plotting geometry :('
 
         if save_frames:
             F = plt.gcf()
@@ -274,7 +268,6 @@ def surface_line(sep_pixels, mode='max'):
         return la_masked.argmax(axis=1)
     elif (mode == 'min'):
         return la_masked.argmin(axis=1)
-
 
 
 # End of file plotting.py

@@ -113,47 +113,60 @@ def width_gaussian(y, mu, imin=4, imax=8, l2min=4):
     def err_fun(p, y, x):
         return (y - gaussian_fun(x, p))
 
+    # the index range on which we fit
     irange = np.arange(imin, imax, dtype='int')
+    # corresponding x range, in pixel
     xrg = np.arange(0, y.shape[0])
+    # Best fit for given index range
     p = np.zeros(irange.shape[0])
+    # L2 norm of best fit on given index range
     L2 = np.zeros(irange.shape[0])
 
-#    plt.figure()
-#    plt.plot([mu], [1.0], 'ko')
+    #plt.figure()
+    #plt.plot([mu], [1.0], 'ko')
 
     for idx, i in enumerate(irange):
+        # Build interval to fit on, [mu - i : mu + i], stop at interval boundaries though
         idx_lo = int(max(mu - i, 0))
         idx_up = int(min(mu + i, y.shape[0]))
+        # x range, in pixel
         fit_range = xrg[idx_lo:idx_up]
+        # Data to fit on, normalized to unity
         fit_data = y[idx_lo:idx_up] / y[idx_lo:idx_up].max()
+        #print 'mu = %d, i = %d, idx_lo = %d, idx_up = %d' % (mu, i, idx_lo, idx_up)
+        #print 'fit_range = ', fit_range, ', fit_data  = ', fit_data
 
+        # Fit Gaussian on interval
         p0 = [1.0]
         p_i, success_i = leastsq(err_fun, p0, args=(fit_data, fit_range), maxfev=1000)
         p[idx] = p_i
 
+        # Compute L2 norm of the fit
         mid_idx = fit_data.shape[0] / 2
-        l2_idx = np.arange(mid_idx - l2min, mid_idx + l2min, 1, dtype='int')
-        L2[idx] = ((fit_data[l2_idx] - gaussian_fun(p_i, fit_range[l2_idx])) ** 2.0).sum() / float(l2_idx.shape[0])
+        l2_idx = np.arange(max(0, mid_idx - l2min), min(63, mid_idx + l2min), 1, dtype='int')
 
-#        print i, p[idx], L2[idx], success_i
-#
-#        label_str = 'sigma = %5.2f, L2 = %5.2f' % (p[idx], L2[idx])
-#        plt.plot(fit_range, fit_data)
-#        plt.plot(fit_range, gaussian_fun(fit_range, p[idx]), label=label_str)
+        #print 'L2.shape = ', L2.shape, 'idx = ', idx, ', fit_data.shape = ', fit_data.shape, ', l2_idx = ', l2_idx
+
+        #L2[idx] = ((fit_data[l2_idx] - gaussian_fun(p_i, fit_range[l2_idx])) ** 2.0).sum() / float(l2_idx.shape[0])
+        L2[idx] = ((fit_data - gaussian_fun(p_i, fit_range)) ** 2.0).sum() / float(fit_range.shape[0])
+
+        label_str = 'sigma = %5.2f, L2 = %5.2f' % (p[idx], L2[idx])
+        #plt.plot(fit_range, fit_data)
+        #plt.plot(fit_range, gaussian_fun(fit_range, p[idx]), label=label_str)
 
     best_fit_idx = L2.argmin()
-#    idx_lo = int(max(mu - irange[best_fit_idx], 0))
-#    idx_up = int(min(mu + irange[best_fit_idx], y.shape[0]))
-#
-#    plt.figure()
-#    plt.plot([mu], [1.0], 'ko')
-#    fit_range = xrg[idx_lo:idx_up]
-#    fit_data = y[idx_lo:idx_up] / y[idx_lo:idx_up].max()
-#    plt.plot(fit_range, fit_data)
-#    plt.plot(fit_range, gaussian_fun(fit_range, p[best_fit_idx]), 'k', lw=3)
+    idx_lo = int(max(mu - irange[best_fit_idx], 0))
+    idx_up = int(min(mu + irange[best_fit_idx], y.shape[0]))
 
-#    plt.legend()
-#    plt.show()
+    #plt.figure()
+    #plt.plot([mu], [1.0], 'ko')
+    #fit_range = xrg[idx_lo:idx_up]
+    #fit_data = y[idx_lo:idx_up] / y[idx_lo:idx_up].max()
+    #plt.plot(fit_range, fit_data)
+    #plt.plot(fit_range, gaussian_fun(fit_range, p[best_fit_idx]), 'k', lw=3)
+
+    #plt.legend()
+    #plt.show()
     return (p[best_fit_idx], irange[best_fit_idx], L2[best_fit_idx])
 
 

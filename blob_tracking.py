@@ -73,7 +73,7 @@ def blob_tracking(shotnr, frames, trigger=np.array([40, 50, 16, 48]),
 
     # Define the events we will analyze
     event_range = np.arange(num_events)
-#    event_range = np.arange(2)
+#    event_range = np.arange(21, 23)
 #    num_events  = np.size(event_range)
 
     # Get R,z projection, grid data
@@ -112,23 +112,19 @@ def blob_tracking(shotnr, frames, trigger=np.array([40, 50, 16, 48]),
                                        frame0=frame0,
                                        doplots=False)
 
-        print ''
-        print 'blob trail max:', newtrail.get_xymax()
-        print 'blob trail COM:', newtrail.get_xycom()
-        print ''
-        print '=========================================================='
 
         if (np.size(newtrail.get_tau()) < 4):
             fail_list.append(idx)
             failcount += 1
 
             log_str = 'Peak %d: Trail too short: %d frames' %\
-                (idx, newtrail.get_tau.size)
-
+                (idx, newtrail.get_tau().size)
             try:
                 logger.info(log_str)
             except:
-                print log_str
+                # Do nothing
+                pass
+            print log_str
 
             continue
 

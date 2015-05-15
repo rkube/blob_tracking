@@ -21,8 +21,6 @@ from scipy.optimize import leastsq
 from tracker import tracker_geom
 from geometry import com 
 from helper_functions import find_closest_region, width_gaussian
-#from plotting.separatrix_line import surface_line
-# from separatrix_line import surface_line
 
 
 class blobtrail:
@@ -129,10 +127,15 @@ class blobtrail:
         """
         The index for the frame where the blob was detected
         """
-        return self.tau_b
+        return self.frame0
 
-    # If a rz_array is passed, compute positions and velocities in R-Z space. Otherwise return
-    # positions and velocities in pixel space
+    
+    def length(self):
+        """
+        Length of the trail
+        """
+        return self.tau.size
+
 
     def get_xycom(self):
         """
@@ -187,6 +190,12 @@ class blobtrail:
         """
         return self.tau
 
+    def get_event(self):
+        """
+        Return the event where we started tracking from
+        """
+        return self.event
+
     def get_event_frames(self):
         """
         Return the frames in which the blob event occurs
@@ -202,22 +211,22 @@ class blobtrail:
 
         assert( position in ['COM', 'MAX'] )
 
-        if ( frameno != None ):
-            assert ( isinstance( frameno, np.ndarray ) )
-            assert ( frameno.max() <= self.tau_f )
-            assert ( frameno.min() >= -self.tau_b )
+        if (frameno is not None) :
+            assert (isinstance(frameno, np.ndarray))
+            assert (frameno.max() <= self.tau_f)
+            assert (frameno.min() >= -self.tau_b)
 
-            blob_shape = np.zeros([ np.size(frameno), 2*self.blob_ext, 2*self.blob_ext])
+            blob_shape = np.zeros([np.size(frameno), 2 * self.blob_ext, 2 * self.blob_ext])
             t_off = frameno
 
         else:
-            blob_shape = np.zeros([np.size(self.tau), 2*self.blob_ext, 2*self.blob_ext])
+            blob_shape = np.zeros([np.size(self.tau), 2 * self.blob_ext, 2 * self.blob_ext])
             t_off = np.arange(np.size(self.tau))
 
 
-        if ( position == 'COM' ):
+        if (position is 'COM'):
             x_off, y_off = self.xycom[:,0].astype('int'), self.xycom[:,1].astype('int')
-        elif ( position == 'MAX' ):
+        elif (position is 'MAX'):
             x_off, y_off = self.xymax[:,0].astype('int'), self.xymax[:,1].astype('int')
 
         for t_idx, t in enumerate(t_off):
@@ -225,86 +234,5 @@ class blobtrail:
 
         print 'blob_shape finished'
         return blob_shape
-
-#    def compute_fwhm(self, frames, rz_array=None, position='COM', norm=False,
-#                     plots=False):
-#        """
-#        Computes the FWHM of the detected blob at its maximum
-#
-#        Input:
-#            frames:         GPI data
-#            rz_array:       2d array with (R,z) value for each pixel. If
-#                            omitted, computes FWHM in pixels
-#            position:       Compute FWHM at center of mass 'COM' or maximum
-#                            'MAX'
-#            norm:           Normalize intensity to maximum
-#        """
-#
-#        assert (position in ['COM', 'MAX'])
-#        fwhm_rad_idx = np.zeros([self.tau_b + self.tau_f, 2], dtype='int')
-#        fwhm_pol_idx = np.zeros([self.tau_b + self.tau_f, 2], dtype='int')
-#
-#        if (position == 'COM'):
-#            xy_off = self.xycom.astype('int')
-#            self.fwhm_computed = 'COM'
-#        elif (position == 'MAX'):
-#            xy_off = self.xymax.astype('int')
-#            self.fwhm_computed = 'MAX'
-#
-#        # Compute the FWHM for each frame if the blob has sufficiently
-#        # large distance from the frame boundaries.
-#
-#        for t, ttau in enumerate(self.tau):
-#            t_idx = self.event[1] + self.frame0 + ttau
-#
-#            slice_pol = frames[t_idx, max(0, xy_off[t, 0] - self.fwhm_max_idx):
-#                               min(63, xy_off[t, 0] + self.fwhm_max_idx),
-#                               xy_off[t, 1]]
-#            slice_rad = frames[t_idx, xy_off[t, 0], max(xy_off[t, 1] -
-#                                                        self.fwhm_max_idx, 0):
-#                               min(xy_off[t, 1] + self.fwhm_max_idx, 63)]
-#
-#            fwhm_rad_idx[t, :] = (fwhm(slice_rad / slice_rad.max()) +
-#                                  xy_off[t, 1] - self.fwhm_max_idx)
-#            fwhm_pol_idx[t, :] = (fwhm(slice_pol / slice_pol.max()) +
-#                                  xy_off[t, 0] - self.fwhm_max_idx)
-#
-#            try:
-#                self.fwhm_ell_rad[t] = (rz_array[xy_off[t, 0],
-#                                                 fwhm_rad_idx[t, 1], 0] -
-#                                        rz_array[xy_off[t, 0],
-#                                                 fwhm_rad_idx[t, 0], 0]) /\
-#                    2.355
-#                self.fwhm_ell_pol[t] = (rz_array[fwhm_pol_idx[t, 1],
-#                                                 xy_off[t, 1], 1] -
-#                                        rz_array[fwhm_pol_idx[t, 0],
-#                                                 xy_off[t, 1], 1]) / 2.355
-#            except NameError:
-#                self.fwhm_ell_rad[t] = (fwhm_rad_idx[t, 1] -
-#                                        fwhm_rad_idx[t, 0])
-#                self.fwhm_ell_pol[t] = (fwhm_pol_idx[t, 1] -
-#                                        fwhm_pol_idx[t, 0])
-#
-## Debugging of the expressions above
-##                print 'poloidal:  x_off = ', xy_off[t,1], ' from r_idx = ', fwhm_pol_idx[t,1] ,' to ', fwhm_pol_idx[t,0]
-##                print ' is ', rz_array[fwhm_pol_idx[t,1], xy_off[t,1], 1] , ' to ', rz_array[fwhm_pol_idx[t,0], xy_off[t,1], 1]
-#
-#            if plots:
-#                plt.figure()
-#                plt.title('Cross sections at %s' % position)
-#                plt.plot(frames[t_idx, xy_off[t, 0], :], '.-',
-#                         label='radial xsection')
-#                plt.plot(frames[t_idx, :, xy_off[t, 1]], '.-',
-#                         label='poloidal xsection')
-#                plt.plot(fwhm_rad_idx[t, :], frames[t_idx, xy_off[t, 0],
-#                                                    fwhm_rad_idx[t, :]],
-#                         'b--')
-#                plt.plot(fwhm_pol_idx[t, :], frames[t_idx,
-#                                                    fwhm_pol_idx[t, :],
-#                                                    xy_off[t, 1]], 'g--')
-#                plt.axvline(xy_off[t, 1], color='red')
-#                plt.axvline(xy_off[t, 0], color='red')
-#                plt.legend(loc='lower left')
-#                plt.show()
 
 # End of file blobtrail.py

@@ -1,18 +1,23 @@
 #!/opt/local/bin/python
 # -*- Encoding: UTF-8 -*-
 
+import sys
+sys.path.append('.')
+
 import numpy as np
 import logging
 import cPickle
 import matplotlib as mpl
-from load_mdsframes import load_mdsframes
-from blob_tracking import blob_tracking as blob_tracking_fun
-from plotting import plot_trail_simple, plot_trail_geom
 from scipy.io import readsav
 
+from load_mdsframes import load_mdsframes
 from misc.phantom_helper import make_rz_array
-import helper_functions
+from blob_tracking import blob_tracking as blob_tracking_fun
+from plotting import plot_trail_geom
+
 from geometry import find_sol_pixels
+from analysis.velocity_analysis import velocity_analysis
+
 
 frame0 = 0
 nframes = 10000
@@ -62,6 +67,8 @@ for shotnr in shotlist:
     #
     trails = blob_tracking_fun(shotnr, frames, trigger, minmax)
 
+    print 'Found %d blob trails' % len(trails)
+
     # #########################################################################
     # Compute geometry data from GPI and plot some blob trails
     #
@@ -70,16 +77,16 @@ for shotnr in shotlist:
                            np.linspace(rz_array[:, :, 1].min(), rz_array[:, :, 1].max(), 64))
     xyi = np.concatenate((xxi[:, :, np.newaxis], yyi[:, :, np.newaxis]), axis=2)
     # Compute the indices between LCFS and limiter shadow
-    good_idx = find_sol_pixels(sep)
-    domain = np.array(good_idx)[:, :].tolist()
+    sol_px = find_sol_pixels(sep)
+    #domain = np.array(good_idx)[:, :].tolist()
 
-    for trail in trails[:5]:
-        # Plot a simple trail
-        #plot_trail_simple(trail, frames, plot_shape=True)
-        # Plot trail with GPI geometry overlay
-        plot_trail_geom(trail, frames, rz_array=rz_array, xyi=xyi, 
-                trigger_box=trigger, sep_data=sep, 
-                plot_com=True, plot_max=False, plot_geom=True) 
+    #for trail in trails[-1:]:
+    #    # Plot a simple trail
+    #    #plot_trail_simple(trail, frames, plot_shape=True)
+    #    # Plot trail with GPI geometry overlay
+    #    plot_trail_geom(trail, frames, rz_array=rz_array, xyi=xyi, 
+    #            trigger_box=trigger, sep_data=sep, 
+    #            plot_com=True, plot_max=False, plot_geom=True) 
 
     # #########################################################################
     # Save trails for later use
@@ -94,6 +101,7 @@ for shotnr in shotlist:
     # #########################################################################
     # Compute blobtrail statistics
     #
+    velocity_analysis(trails, frames, sol_px, rz_array, xyi)
 
     #print 'Computing trail statistics'
     #blob_amps, blob_ell, blob_vel, blob_shape, blobs_used_good_domain, fail_list = blob_statistics.statistics_blob_sol(shotnr, trails, fi, frames=frames, good_domain=domain, logger=logger)
