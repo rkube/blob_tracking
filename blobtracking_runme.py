@@ -10,12 +10,11 @@ import cPickle
 import matplotlib as mpl
 from scipy.io import readsav
 
-from load_mdsframes import load_mdsframes
-from misc.phantom_helper import make_rz_array
+from load_frames import load_mdsframes
+from misc.phantom_helper import make_rz_array, find_sol_pixels
 from blob_tracking import blob_tracking as blob_tracking_fun
 from plotting import plot_trail_geom
 
-from geometry import find_sol_pixels
 from analysis.velocity_analysis import velocity_analysis
 
 
@@ -62,6 +61,13 @@ for shotnr in shotlist:
     fname_sep = '%s/%10d_separatrix.sav' % (datadir, shotnr)
     sep = readsav(fname_sep)
 
+    sol_px = find_sol_pixels(sep)
+
+    print type(sol_px)
+    print sol_px.shape
+    print sol_px
+    
+    raise ValueError
     # #########################################################################
     # Do blob tracking
     #
@@ -77,7 +83,7 @@ for shotnr in shotlist:
                            np.linspace(rz_array[:, :, 1].min(), rz_array[:, :, 1].max(), 64))
     xyi = np.concatenate((xxi[:, :, np.newaxis], yyi[:, :, np.newaxis]), axis=2)
     # Compute the indices between LCFS and limiter shadow
-    sol_px = find_sol_pixels(sep)
+
     #domain = np.array(good_idx)[:, :].tolist()
 
     #for trail in trails:

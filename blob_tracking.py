@@ -27,7 +27,7 @@ def blob_tracking(shotnr, frames, trigger=np.array([40, 50, 16, 48]),
     """
     Run blob detection and tracking on the provided frames
     shotnr:   integer, 10 digits. Shot identifier 
-    frames:   ndarray, axis0: time, axis1: radial, axis2: poloidal
+    frames:   ndarray, axis0: time, axis1: poloidal, axis2: radial
     trigger:  ndarray, Array in which blobs are to be detected: [r_lo, r_up, z_low, z_up]
     minmax:   ndarray, minimum / maximum threshold for blob detection
     logger:   logger facility to use
@@ -72,8 +72,8 @@ def blob_tracking(shotnr, frames, trigger=np.array([40, 50, 16, 48]),
         print log_msg
 
     # Define the events we will analyze
-    event_range = np.arange(num_events)
-#    event_range = np.arange(21, 23)
+#    event_range = np.arange(num_events)
+    event_range = np.arange(3)
 #    num_events  = np.size(event_range)
 
     # Get R,z projection, grid data
@@ -106,12 +106,12 @@ def blob_tracking(shotnr, frames, trigger=np.array([40, 50, 16, 48]),
         newtrail = blobtrail.blobtrail(frames[t0 - tau_max:
                                               t0 + tau_max + 1, :, :],
                                        event, shotnr,
-                                       thresh_amp=0.7, blob_ext=14,
+                                       thresh_amp=0.6, blob_ext=14,
                                        thresh_dist=8.,
                                        fwhm_max_idx=18,
                                        frame0=frame0,
-                                       doplots=False)
-
+                                       doplots=True)
+        plt.show()
 
         if (np.size(newtrail.get_tau()) < 4):
             fail_list.append(idx)

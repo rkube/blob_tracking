@@ -18,6 +18,7 @@ until no sufficiently large region can be identified
 """
 
 import numpy as np
+import matplotlib.pyplot as plt
 from geometry import com
 from helper_functions import find_closest_region, width_gaussian, TrackingError
 
@@ -114,7 +115,8 @@ def tracker_geom(frames, x0, event, thresh_amp, thresh_dist, blob_ext,
         #     xycom[tau,:] = [index for axis 1, index for axis 2]
         # To be consistent with indexing from xymax, flip this array
         # COM returns com along second dimension at index 0
-        xycom[tau, ::-1] = com(event_masked)
+        #xycom[tau, ::-1] = com(event_masked)
+        xycom[tau, :] = com(event_masked)
         ycom_off, xcom_off = xycom[tau, :].round().astype('int')
 
         # Follow the peak
@@ -143,6 +145,9 @@ def tracker_geom(frames, x0, event, thresh_amp, thresh_dist, blob_ext,
             plt.colorbar()
             plt.xlabel('x / px')
             plt.ylabel('y / px')
+
+            print '-------------tracker--'
+            print 'xycom = ', xycom
 
             plt.subplot(132)
             plt.plot(event_frame[xycom[tau, 0], :], 'b', label='ax0')

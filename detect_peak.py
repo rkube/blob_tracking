@@ -14,7 +14,10 @@ def detect_peak_3d(signal, trigger_box, minmax, lag, rel_idx=False):
     a deadtime after a peak.
 
     Input:
-        signal           : ndarray, 3d array of surfaces
+        signal           : ndarray, 3d array of surfaces.
+                                    axis0: time
+                                    axis1: poloidal
+                                    axis2: radial
         trigger_box      : array-like, [Rl, Ru, zl, zu] bounding box of the trigger
                            array
         minmax           : array-like, [min, max] range in which the peak must lie
@@ -23,7 +26,7 @@ def detect_peak_3d(signal, trigger_box, minmax, lag, rel_idx=False):
                            signal, not as relative indices to the provided cutoffs
 
     Output
-        peak_list   : Structured array ( Amplitude, tidx, ridx, zidx ) of
+        peak_list   : Structured array (Amplitude, tidx, ridx, zidx) of
                       detected peaks
     """
 

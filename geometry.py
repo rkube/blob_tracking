@@ -19,16 +19,23 @@ def com(array, xx=None, yy=None):
     If xx and yy are not specified, use x = 0,1,...,np.shape(array)[0],
     and y = 0, 1, ..., np.shape(array)[1]
 
-    Returns
-        x_com, y_com
+
+    Input:
+        array:    ndarray, frame data. axis0: poloidal direction 
+                                       axis1: radial direction
+        xx   :    ndarray, radial coordinate of each pixel in array
+        yy   :    ndarray, poloidal coordinate of each pixel in array
+
+    Output:
+        (y_com, x_com)
     """
     array = array.astype('float')
     if (xx is None and yy is None):
-        xx, yy = np.meshgrid(np.arange(0, array.shape[0], 1.0),
-                             np.arange(0, array.shape[1], 1.0))
+        xx, yy = np.meshgrid(np.arange(0, array.shape[1], 1.0),
+                             np.arange(0, array.shape[0], 1.0))
         # If dx and dy are not specified, assume a regularly spaced grid
-        return ((xx * array).sum() / array.sum(),
-                (yy * array).sum() / array.sum())
+        return ((yy * array).sum() / array.sum(),
+                (xx * array).sum() / array.sum())
     else:
         # Compute the increments in x and y
         dx = np.zeros_like(xx)
@@ -40,58 +47,8 @@ def com(array, xx=None, yy=None):
         dy[-2, :] = dy[-1, :]
         # Surface element
         dA = np.abs(dx) * np.abs(dy)
-        return ((xx * array * dA).sum() / (array * dA).sum(),
-                (yy * array * dA).sum() / (array * dA))
-
-
-def com_rz(array, RR, zz):
-    """
-    Return the center of mass position on the irregulary spaced RR, zz array:
-    R_com = int ( R * n * dA ) / int ( n * dA ), along second dimension
-    z_com = int ( z * n * dA ) / int ( n * dA ), along first dimension
-    """
-    array = array.astype("float")
-    dR, dz = np.zeros_like(RR), np.zeros_like(zz)
-    dR[:, :-1] = RR[:, 1:] - RR[:, :-1]
-    dR[:, -1] = dR[:, -2]
-    dz[:-1, :] = zz[1:, :] - zz[:-1, :]
-    dz[-1, :] = dz[:, -2]
-
-    dA = np.abs(dR) * np.abs(dz)
-
-    # COM along second dimension, COM along first dimension
-    return((RR * array * dA).sum() / (array * dA).sum(),
-           (zz * array * dA).sum() / (array * dz).sum())
-    # return np.sum( RR * array * dR * dz ) / np.sum (array * dR * dz ) ,\
-    #     np.sum( zz * array * dR * dz ) / np.sum (array * dR * dz )
-
-#def find_sol_pixels(shotnr, frame_info=None, rz_array=None,
-#                    datadir='/Users/ralph/source/blob_tracking/test_data'):
-def find_sol_pixels(s):
-    """
-    Returns the indices of the pixels in between the separatrix and the LCFS.
-
-    s:    Processed separatrix data from IDL
-          i.e. s = readsav('%s/separatrix.sav' % (datadir), verbose=False)
-          see /usr/local/cmod/codes/efit/idl/efit_rz2rmid.pro
-              /home/terry/gpi/phantom/retrieve_phantom_RZ_array.pro
-              /home/rkube/IDL/separatrix.pro,
-    """
-    gap_idx_mask = ((s['rmid'].reshape(64, 64) > s['rmid_sepx']) &
-                    (s['rmid'].reshape(64, 64) < s['rmid_lim']))
-
-    return np.argwhere(gap_idx_mask)
-
-
-def find_sol_mask(shotnr, frame_info=None, rz_array=None,
-                  datadir='/Users/ralph/source/blob_tracking/test_data'):
-    """
-    Returns a mask for the pixels in between the separatrix and the LCFS.
-    """
-    s = readsav('%s/separatrix.sav' % (datadir), verbose=False)
-
-    return ((s['rmid'].reshape(64, 64) > s['rmid_sepx']) &
-            (s['rmid'].reshape(64, 64) < s['rmid_lim']))
+        return ((yy * array * dA).sum() / (array * dA).sum(),
+                (xx * array * dA).sum() / (array * dA))
 
 
 def blob_in_sol(trail, sol_px , coord='COM', logger=None):
@@ -137,7 +94,7 @@ def trail_com(trail, rz_array):
     is passed.
     """
 
-    if ( rz_array == None ):
+    if (rz_array is None):
         return self.xycom
 
     return rz_array[self.xycom[:,0].astype('int'), self.xycom[:,1].astype('int'), :]
@@ -148,7 +105,7 @@ def get_trail_max(self, rz_array=None):
     Return the position of the blob maximum. Either in pixel or in (R,Z) coordinates if rz_array
     is passed.
     """
-    if ( rz_array == None ):
+    if (rz_array is None):
         return self.xymax
 
     # Remember xycom[:,1] is the radial (X) index which corresponds to R
@@ -202,6 +159,28 @@ def velocity_com(trail, rz_array=None, dt=2.5e-6):
         vmax = xycom[1:, :] - xycom[:-1, :]
 
     return (vmax)
+
+
+#def com_rz(array, RR, zz):
+#    """
+#    Return the center of mass position on the irregulary spaced RR, zz array:
+#    R_com = int ( R * n * dA ) / int ( n * dA ), along second dimension
+#    z_com = int ( z * n * dA ) / int ( n * dA ), along first dimension
+#    """
+#    array = array.astype("float")
+#    dR, dz = np.zeros_like(RR), np.zeros_like(zz)
+#    dR[:, :-1] = RR[:, 1:] - RR[:, :-1]
+#    dR[:, -1] = dR[:, -2]
+#    dz[:-1, :] = zz[1:, :] - zz[:-1, :]
+#    dz[-1, :] = dz[:, -2]
+#
+#    dA = np.abs(dR) * np.abs(dz)
+#
+#    # COM along second dimension, COM along first dimension
+#    return((RR * array * dA).sum() / (array * dA).sum(),
+#           (zz * array * dA).sum() / (array * dz).sum())
+#    # return np.sum( RR * array * dR * dz ) / np.sum (array * dR * dz ) ,\
+#    #     np.sum( zz * array * dR * dz ) / np.sum (array * dR * dz )
 
 
 # End of file geometry.py

@@ -23,6 +23,10 @@ from scipy.optimize import leastsq
 from scipy.io import readsav
 
 
+class TrackingError(Exception):
+    pass
+
+
 
 def frac_to_idx(frac, f_min, f_max, nbins):
     """
@@ -170,10 +174,6 @@ def width_gaussian(y, mu, imin=4, imax=8, l2min=4):
     return (p[best_fit_idx], irange[best_fit_idx], L2[best_fit_idx])
 
 
-class TrackingError(Exception):
-    pass
-
-
 def find_closest_region(frame, thresh_amp, x0, max_dist=2.0, verbose=False):
     """
     Returns the contiguous area above a threshold in a frame, whose centroid coordinates 
@@ -245,20 +245,20 @@ def find_closest_region(frame, thresh_amp, x0, max_dist=2.0, verbose=False):
     event_masked = np.ma.MaskedArray(frame,
                                      mask=blob_mask,
                                      fill_value=0)
-    #plt.figure()
-    #plt.subplot(131)
-    #plt.contourf(labels)
-    #plt.colorbar()
-
-    #plt.subplot(132)
-    #plt.contourf(frame, 64)
-    #plt.colorbar()
-
-    #plt.subplot(133)
-    #plt.contourf(event_masked)
-    #plt.colorbar()
-
-    #plt.show()
+#    plt.figure()
+#    plt.subplot(131)
+#    plt.contourf(labels)
+#    plt.colorbar()
+#
+#    plt.subplot(132)
+#    plt.contourf(frame, 64)
+#    plt.colorbar()
+#
+#    plt.subplot(133)
+#    plt.contourf(event_masked)
+#    plt.colorbar()
+#
+#    plt.show()
 
     return (x_centroid, event_masked)
 

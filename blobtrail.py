@@ -8,9 +8,8 @@ blobtrail
 
 .. codeauthor :: Ralph Kube <ralphkube@gmail.com>
 
-A class that defines a blob event in a sequence of frames from phantom
-camera data
-
+A class that defines a blob event in a sequence of frames 
+from 2d turbulence imaging
 """
 
 import numpy as np
@@ -29,8 +28,10 @@ class blobtrail:
     input:
     =====
 
-    * frames:      Phantom frames
-    * event:       structured array (intensity, t0, R0, z0)
+    * frames:      imaging frames. axis0: time
+                                   axis1: poloidal direction
+                                   axis2: radial direction
+    * event:       structured array (intensity, t0, z0, R0)
     * shotnr:      shotnr
     * tau_max:     Maximal number of frames for fwd/bwd tracking
     * thresh_dist: Max. distance a peak is allowd to travel per frame
@@ -73,8 +74,10 @@ class blobtrail:
         # Compute maximum and COM coordinates of the blob within in the first centroid
         xycom0 = com(dummy)
         xycom0 = np.array(xycom0)
+        #print 'before: ', xycom0
         # See com
-        xycom0 = xycom0[::-1]
+        #xycom0 = xycom0[::-1]
+        #print 'after', xycom0
         
         xymax0 = np.unravel_index(dummy.argmax(), frames[0, :, :].shape)
         xymax0 = np.array(xymax0)
@@ -83,8 +86,8 @@ class blobtrail:
         sigma_pol0, dummy1, dummy2 = width_gaussian(frame0[:, xymax0[1]], xymax0[0])
 
         # Track blob forwards and backwards, combine results
-        self.track_forward(frames, x0, doplots=False)
-        self.track_backward(frames, x0, doplots=False)
+        self.track_forward(frames, x0, doplots=doplots)
+        self.track_backward(frames, x0, doplots=doplots)
 
         # Combine results from forward and backward tracking
         # Values about the blob path [backward, 0, forward]
@@ -108,7 +111,7 @@ class blobtrail:
 
         res = tracker_geom(frames[idx_frames, :, :], x0, self.event,
                            self.thresh_amp, self.thresh_dist, self.blob_ext,
-                           plots=doplots, verbose=False)
+                           plots=doplots, verbose=True)
         self.tau_b, self.amp_b, self.xycom_b, self.xymax_b, self.width_rad_b, self.width_pol_b = res
 
 
