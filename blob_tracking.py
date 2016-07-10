@@ -22,6 +22,7 @@ def blob_tracking(shotnr, frames, trigger=np.array([40, 50, 16, 48]),
                   minmax=np.array([2.0, 10.0]),
                   logger=None, 
                   datadir='/Volumes/Backup/cmod_data/phantom/',
+                  doplots=False,
                   frame0=0):
 
     """
@@ -72,8 +73,8 @@ def blob_tracking(shotnr, frames, trigger=np.array([40, 50, 16, 48]),
         print log_msg
 
     # Define the events we will analyze
-#    event_range = np.arange(num_events)
-    event_range = np.arange(3)
+    event_range = np.arange(num_events)
+#    event_range = np.arange(3)
 #    num_events  = np.size(event_range)
 
     # Get R,z projection, grid data
@@ -110,7 +111,7 @@ def blob_tracking(shotnr, frames, trigger=np.array([40, 50, 16, 48]),
                                        thresh_dist=8.,
                                        fwhm_max_idx=18,
                                        frame0=frame0,
-                                       doplots=True)
+                                       doplots=doplots)
         plt.show()
 
         if (np.size(newtrail.get_tau()) < 4):

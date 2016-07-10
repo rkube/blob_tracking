@@ -1,4 +1,6 @@
 # blob_tracking
-Track blob propagation in GPI data
+Track blob propagation in 2d turbulence frames
 
-As of now, this repository is quiet messy. Wait for updates or email for source code
+Works with GPI and turbulence simulation data
+
+
